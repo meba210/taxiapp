@@ -4,7 +4,7 @@ import {
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import BASE_URL from "@/utils/config";
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -28,7 +28,7 @@ export default function TaxiRegistration({ visible, onClose, onTaxiCreated }: Pr
       const token = await AsyncStorage.getItem("token");
       if (!token) return Alert.alert("Error", "No token found");
 
-      const res = await axios.get("http://localhost:5000/dispacher-route", {
+      const res = await axios.get(`${BASE_URL}/dispacher-route`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -51,7 +51,7 @@ export default function TaxiRegistration({ visible, onClose, onTaxiCreated }: Pr
       if (!token) return Alert.alert("Error", "No token found");
 
       await axios.post(
-        "http://localhost:5000/taxis",
+        `${BASE_URL}/taxis`,
         {
           DriversName,
           LicenceNo,
@@ -78,9 +78,14 @@ export default function TaxiRegistration({ visible, onClose, onTaxiCreated }: Pr
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible}
+     animationType="slide" transparent 
+    onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.modalBox}>
+            <Pressable style={styles.closeButton} onPress={onClose}>
+    <Text style={{ fontSize: 18, fontWeight: "bold" }}>×</Text>
+  </Pressable>
           <Text style={styles.title}>Register New Taxi</Text>
 
           <TextInput
@@ -149,6 +154,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  closeButton: {
+  position: "absolute",
+  top: 10,
+  right: 10,
+  padding: 5,
+  zIndex: 1,
+},
+
   button: {
     marginTop: 15,
     backgroundColor: "#00bfff",

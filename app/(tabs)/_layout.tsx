@@ -15,6 +15,7 @@ export default function TabsLayout() {
           backgroundColor: "#fff",
           height: 60,
           borderTopWidth: 0.2,
+           display: "none" 
         },
       }}>
          <Tabs.Screen

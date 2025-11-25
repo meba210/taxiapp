@@ -16,7 +16,7 @@ export default function RootLayout() {
 
   return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-    <ThemeProvider value={colorScheme === 'light' ? DarkTheme : DefaultTheme} children={undefined}>
+    <ThemeProvider value={colorScheme === 'light' ? DarkTheme : DefaultTheme}>
    
       <Stack initialRouteName='SplashScreen'>
           <Stack.Screen name="SplashScreen" options={{ headerShown: false }} />
