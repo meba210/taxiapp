@@ -10,6 +10,7 @@ interface Taxi {
 
 export default function AvailableTaxi() {
   const [taxis, setTaxis] = useState<Taxi[]>([]);
+  const [assignedtaxis, setAssignedTaxis] = useState<Taxi[]>([]);
   const [queuedPlates, setQueuedPlates] = useState<string[]>([]); // NEW: disable logic
  const [route, setRoute] = useState<string | null>(null);
   const addToQueue = async (PlateNo: string) => {
@@ -71,6 +72,27 @@ export default function AvailableTaxi() {
     }
   };
 
+
+   const fetchAssignedTaxis = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+        if (!route) return;
+       const res = await axios.get(
+      `${BASE_URL}/assignTaxis/assignedTaxis?route=${encodeURIComponent(route)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+      setAssignedTaxis(res.data);
+    } catch (err) {
+      console.error("Failed to fetch taxis:", err);
+    }
+  };
+
+
+
   const fetchQueueState = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -90,6 +112,7 @@ export default function AvailableTaxi() {
   useEffect(() => {
     fetchTaxis();
     fetchQueueState();
+    fetchAssignedTaxis();
   }, []);
 
   return (
@@ -128,11 +151,48 @@ export default function AvailableTaxi() {
                     {isQueued ? "Added" : "Add to Queue"}
                   </Text>
                 </Pressable>
+                
               </View>
+              
             </View>
+            
           );
         })
       )}
+            <View style={{ marginTop: 20 }}>
+        <Pressable
+          style={styles.button}
+          onPress={fetchAssignedTaxis}
+        >
+          <Text style={styles.buttonText}>Assigned Taxis</Text>
+        </Pressable>
+
+        {assignedtaxis.length === 0 ? (
+          <Text style={styles.empty}>No assigned taxis yet</Text>
+        ) : (
+          assignedtaxis.map((t, index) => {
+              const isQueued = queuedPlates.includes(t.PlateNo);
+              return(
+                   <View key={index} style={styles.card}>
+              <Text style={styles.label}>
+                Taxi: <Text style={styles.value}>{t.PlateNo}</Text>
+              </Text>
+              <Pressable
+                  style={[
+                    styles.button,
+                    isQueued && styles.buttonDisabled,
+                  ]}
+                  disabled={isQueued}
+                  onPress={() => addToQueue(t.PlateNo)}
+                >
+                  <Text style={styles.buttonText}>
+                    {isQueued ? "Added" : "Add to Queue"}
+                  </Text>
+                </Pressable>
+            </View>
+          )}
+        ))}
+      </View>
     </ScrollView>
   );
 }

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
 import React, { useEffect, useState } from "react";
 import { TextInput } from "react-native-gesture-handler";
 import TaxiRegistration from "@/components/ui/taxiRegistrationModal";
@@ -11,45 +11,102 @@ import BASE_URL from "@/utils/config";
 export default function TaxiDispatcher() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [queue, setQueue] = useState<{ PlateNo: string }[]>([]);
+  const [queue, setQueue] = useState<{
+    assigned: any; PlateNo: string 
+}[]>([]);
   const [WaitingCount, setWaitingCount] = useState("");
   const [Status, setStatus] = useState("");
+   const [route, setRoute] = useState<string | null>(null);
 const [passengerId, setPassengerId] = useState<number | null>(null);
   
-
-const fetchPassengerQueue = async () => {
-  const token = await AsyncStorage.getItem("token");
-  const res = await axios.get(`${BASE_URL}/passengerqueue`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (res.data.length > 0) {
-    const myRecord = res.data[0]; // only one row per dispatcher
-    setPassengerId(myRecord.id);
-    setWaitingCount(myRecord.waiting_count.toString());
-  }
-};
-
-  const fetchQueue = async () => {
+ const fetchRoute = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
-      if (!token) return;
+      if (!token) return Alert.alert("Error", "No token found");
 
-      const res = await axios.get(`${BASE_URL}/taxi-queue`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await axios.get(`${BASE_URL}/dispacher-route`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      setQueue(res.data);
-    } catch (err) {
+      setRoute(res.data.route); // route is just the name
+    } catch (err: any) {
       console.error(err);
+      Alert.alert("Error", "Failed to fetch assigned route");
     }
   };
 
-  useEffect(() => {
+   useEffect(() => {
+       fetchRoute();
+      }, []);
+
+
+  // const fetchQueue = async () => {
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+  //     if (!token) return;
+
+  //     const res = await axios.get(`${BASE_URL}/taxi-queue`, {
+  //       headers: { Authorization: `Bearer ${token}` }
+  //     });
+
+  //       const assignedRes = await axios.get(
+  //     `${BASE_URL}/assignTaxis/assigned?route=${encodeURIComponent(route)}`,
+  //     { headers: { Authorization: `Bearer ${token}` } }
+  //   );
+
+  //     setQueue(res.data);
+  //   } catch (err) {
+  //     console.error(err);
+  //   }
+  // };
+
+
+  const fetchQueue = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    if (!token || !route) return;
+
+    // fetch ALL taxis from queue
+    const queueRes = await axios.get(`${BASE_URL}/taxi-queue`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    // fetch assigned taxis for this route
+    const assignedRes = await axios.get(
+      `${BASE_URL}/assignTaxis/assigned?route=${encodeURIComponent(route)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    const assignedList = assignedRes.data; // [{PlateNo, status}, ...]
+
+    // merge: add "assigned: true" to queue taxis that match assign list
+    const mergedQueue = queueRes.data.map((taxi: any) => ({
+      ...taxi,
+      assigned: assignedList.some((a: any) => a.PlateNo === taxi.PlateNo)
+    }));
+
+    setQueue(mergedQueue);
+
+  } catch (err) {
+    console.error("Error fetching queue:", err);
+  }
+};
+
+useEffect(() => {
+  if (route) {
     fetchQueue();
     const interval = setInterval(fetchQueue, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }
+}, [route]);
+
+  // useEffect(() => {
+  //   fetchQueue();
+  //   const interval = setInterval(fetchQueue, 5000);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   // Remove Taxi From Queue
   const removeTaxi = async (plateNo: string) => {
@@ -91,7 +148,7 @@ const handlePassengerSubmit = async () => {
       // Add new record (backend uses dispatcher_id from JWT)
       const res = await axios.post(
         `${BASE_URL}/passengerqueue`,
-        { waiting_count: WaitingCount },
+        { waiting_count: WaitingCount,route:route },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setPassengerId(res.data.id);
@@ -108,7 +165,7 @@ const handlePassengerSubmit = async () => {
     <ScrollView style={{ backgroundColor: "white" }}>
       <View style={styles.container}>
         {/* Header */}
-        <Text style={styles.headerLabel}>Station:</Text>
+       
         <Text style={styles.headerLabel}>Route:</Text>
 
         {/* PASSENGERS WAITING */}
@@ -147,15 +204,25 @@ const handlePassengerSubmit = async () => {
                   {idx + 1}. {t.PlateNo}
                 </Text>
 
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.removeButton,
-                    pressed && { opacity: 0.7 }
-                  ]}
-                  onPress={() => removeTaxi(t.PlateNo)}
-                >
-                  <Text style={styles.removeButtonText}>On_Trip</Text>
-                </Pressable>
+                {t.assigned ? (
+  <Pressable
+    style={[styles.removeButton, { backgroundColor: "gray" }]}
+    disabled
+  >
+    <Text style={styles.removeButtonText}>Assigned</Text>
+  </Pressable>
+) : (
+  <Pressable
+    style={({ pressed }) => [
+      styles.removeButton,
+      pressed && { opacity: 0.7 }
+    ]}
+    onPress={() => removeTaxi(t.PlateNo)}
+  >
+    <Text style={styles.removeButtonText}>On_Trip</Text>
+  </Pressable>
+)}
+
               </View>
             ))
           )}
@@ -195,7 +262,7 @@ const handlePassengerSubmit = async () => {
   );
 }
 
-/* -------------------------- STYLES -------------------------- */
+
 
 const styles = StyleSheet.create({
   container: {
