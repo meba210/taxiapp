@@ -32,7 +32,7 @@ export default function TaxiRegistration({ visible, onClose, onTaxiCreated }: Pr
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setAssignedRoute(res.data.route); // route is just the name
+      setAssignedRoute(res.data.route); 
     } catch (err: any) {
       console.error(err);
       Alert.alert("Error", "Failed to fetch assigned route");

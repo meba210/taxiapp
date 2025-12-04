@@ -17,8 +17,9 @@ export default function TaxiDispatcher() {
   const [WaitingCount, setWaitingCount] = useState("");
   const [Status, setStatus] = useState("");
    const [route, setRoute] = useState<string | null>(null);
+     const [to_route, setto_Route] = useState<string | null>(null);
 const [passengerId, setPassengerId] = useState<number | null>(null);
-  
+   const [assignedRoute, setAssignedRoute] = useState<string | null>(null);
  const fetchRoute = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -28,7 +29,7 @@ const [passengerId, setPassengerId] = useState<number | null>(null);
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setRoute(res.data.route); // route is just the name
+      setRoute(res.data.route);
     } catch (err: any) {
       console.error(err);
       Alert.alert("Error", "Failed to fetch assigned route");
@@ -37,55 +38,43 @@ const [passengerId, setPassengerId] = useState<number | null>(null);
 
    useEffect(() => {
        fetchRoute();
+       fetchAssignedRoute();
+        const interval = setInterval(fetchQueue, 50000);
+    return () => clearInterval(interval);
       }, []);
 
 
-  // const fetchQueue = async () => {
-  //   try {
-  //     const token = await AsyncStorage.getItem("token");
-  //     if (!token) return;
 
-  //     const res = await axios.get(`${BASE_URL}/taxi-queue`, {
-  //       headers: { Authorization: `Bearer ${token}` }
-  //     });
-
-  //       const assignedRes = await axios.get(
-  //     `${BASE_URL}/assignTaxis/assigned?route=${encodeURIComponent(route)}`,
-  //     { headers: { Authorization: `Bearer ${token}` } }
-  //   );
-
-  //     setQueue(res.data);
-  //   } catch (err) {
-  //     console.error(err);
-  //   }
-  // };
-
-
-  const fetchQueue = async () => {
+const fetchQueue = async () => {
   try {
     const token = await AsyncStorage.getItem("token");
     if (!token || !route) return;
 
-    // fetch ALL taxis from queue
+   
     const queueRes = await axios.get(`${BASE_URL}/taxi-queue`, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    // fetch assigned taxis for this route
+   
     const assignedRes = await axios.get(
       `${BASE_URL}/assignTaxis/assigned?route=${encodeURIComponent(route)}`,
-      {
-        headers: { Authorization: `Bearer ${token}` }
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    const assignedList = assignedRes.data; // [{PlateNo, status}, ...]
+   
+    const assignedList = assignedRes.data;
 
-    // merge: add "assigned: true" to queue taxis that match assign list
-    const mergedQueue = queueRes.data.map((taxi: any) => ({
-      ...taxi,
-      assigned: assignedList.some((a: any) => a.PlateNo === taxi.PlateNo)
-    }));
+    const mergedQueue = queueRes.data.map((taxi:any) => {
+      const assignedRecord = assignedList.find(
+        (a:any) => a.PlateNo === taxi.PlateNo
+      );
+
+      return {
+        ...taxi,
+        // assigned only if this taxi was sent OUT from this route
+        assigned: assignedRecord && assignedRecord.from_route === route
+      };
+    });
 
     setQueue(mergedQueue);
 
@@ -93,6 +82,7 @@ const [passengerId, setPassengerId] = useState<number | null>(null);
     console.error("Error fetching queue:", err);
   }
 };
+
 
 useEffect(() => {
   if (route) {
@@ -102,13 +92,7 @@ useEffect(() => {
   }
 }, [route]);
 
-  // useEffect(() => {
-  //   fetchQueue();
-  //   const interval = setInterval(fetchQueue, 5000);
-  //   return () => clearInterval(interval);
-  // }, []);
-
-  // Remove Taxi From Queue
+ 
   const removeTaxi = async (plateNo: string) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -118,6 +102,11 @@ useEffect(() => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+        
+      await axios.delete(`${BASE_URL}/assignTaxis/${plateNo}`, {
+      headers: { Authorization: `Bearer ${token}` }
+         });
+
       fetchQueue();
     } catch (err) {
       console.error(err);
@@ -125,7 +114,7 @@ useEffect(() => {
     }
   };
 
-  // Update Passenger Count
+ 
 const handlePassengerSubmit = async () => {
   try {
     const token = await AsyncStorage.getItem("token");
@@ -137,7 +126,7 @@ const handlePassengerSubmit = async () => {
     }
 
     if (passengerId) {
-      // Update existing record (backend uses dispatcher_id from JWT)
+      
       await axios.put(
         `${BASE_URL}/passengerqueue/${passengerId}`,
         { waiting_count: WaitingCount },
@@ -145,7 +134,7 @@ const handlePassengerSubmit = async () => {
       );
       alert("Passenger count updated!");
     } else {
-      // Add new record (backend uses dispatcher_id from JWT)
+    
       const res = await axios.post(
         `${BASE_URL}/passengerqueue`,
         { waiting_count: WaitingCount,route:route },
@@ -160,13 +149,30 @@ const handlePassengerSubmit = async () => {
   }
 };
 
+const fetchAssignedRoute = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return Alert.alert("Error", "No token found");
+
+      const res = await axios.get(`${BASE_URL}/dispacher-route`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setAssignedRoute(res.data.route); 
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert("Error", "Failed to fetch assigned route");
+    }
+  };
+
+
 
   return (
     <ScrollView style={{ backgroundColor: "white" }}>
       <View style={styles.container}>
         {/* Header */}
        
-        <Text style={styles.headerLabel}>Route:</Text>
+        <Text style={styles.headerLabel}>Route: {assignedRoute || "Loading..."}</Text>
 
         {/* PASSENGERS WAITING */}
         <View style={styles.section}>
@@ -201,7 +207,7 @@ const handlePassengerSubmit = async () => {
             queue.map((t, idx) => (
               <View key={idx} style={styles.taxiRow}>
                 <Text style={styles.taxiText}>
-                  {idx + 1}. {t.PlateNo}
+                  {idx + 1}.Taxi- {t.PlateNo}
                 </Text>
 
                 {t.assigned ? (
@@ -222,6 +228,7 @@ const handlePassengerSubmit = async () => {
     <Text style={styles.removeButtonText}>On_Trip</Text>
   </Pressable>
 )}
+
 
               </View>
             ))
@@ -246,7 +253,7 @@ const handlePassengerSubmit = async () => {
             />
           )}
 
-          {/* Go to Available Taxi List */}
+     
           <Pressable
             style={({ pressed }) => [
               styles.secondaryButton,

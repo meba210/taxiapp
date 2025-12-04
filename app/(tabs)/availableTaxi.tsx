@@ -11,7 +11,7 @@ interface Taxi {
 export default function AvailableTaxi() {
   const [taxis, setTaxis] = useState<Taxi[]>([]);
   const [assignedtaxis, setAssignedTaxis] = useState<Taxi[]>([]);
-  const [queuedPlates, setQueuedPlates] = useState<string[]>([]); // NEW: disable logic
+  const [queuedPlates, setQueuedPlates] = useState<string[]>([]); 
  const [route, setRoute] = useState<string | null>(null);
   const addToQueue = async (PlateNo: string) => {
     try {
@@ -26,14 +26,13 @@ export default function AvailableTaxi() {
 
       alert(`Taxi ${PlateNo} added to queue`);
 
-      // Disable button immediately
+    
       setQueuedPlates((prev) => [...prev, PlateNo]);
     } catch (err) {
       console.error(err);
       alert("Failed to add taxi");
     }
   };
-
 
    const fetchRoute = async () => {
     try {
@@ -44,7 +43,7 @@ export default function AvailableTaxi() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setRoute(res.data.route); // route is just the name
+      setRoute(res.data.route); 
     } catch (err: any) {
       console.error(err);
       Alert.alert("Error", "Failed to fetch assigned route");
@@ -57,20 +56,25 @@ export default function AvailableTaxi() {
     }, []);
 
 
+  
+
   const fetchTaxis = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
+  try {
+    const token = await AsyncStorage.getItem("token");
+    if (!token || !route) return;
 
-      const res = await axios.get(`${BASE_URL}/taxis`, {
+    const res = await axios.get(
+      `${BASE_URL}/taxis?route=${encodeURIComponent(route)}`,
+      {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      }
+    );
 
-      setTaxis(res.data);
-    } catch (err) {
-      console.error("Failed to fetch taxis:", err);
-    }
-  };
+    setTaxis(res.data);
+  } catch (err) {
+    console.error("Failed to fetch taxis:", err);
+  }
+};
 
 
    const fetchAssignedTaxis = async () => {
@@ -110,10 +114,21 @@ export default function AvailableTaxi() {
   };
 
   useEffect(() => {
-    fetchTaxis();
     fetchQueueState();
-    fetchAssignedTaxis();
+   fetchAssignedTaxis();
   }, []);
+
+  useEffect(()=>{
+    if(route){
+       fetchTaxis();
+    }
+  },[route])
+
+  useEffect(()=>{
+   fetchAssignedTaxis()
+    const interval = setInterval( fetchAssignedTaxis,500000);
+    return () => clearInterval(interval);
+  })
 
   return (
     <ScrollView style={styles.container}>
@@ -197,7 +212,7 @@ export default function AvailableTaxi() {
   );
 }
 
-/* --------------------- STYLES ------------------------ */
+
 
 const styles = StyleSheet.create({
   container: {
