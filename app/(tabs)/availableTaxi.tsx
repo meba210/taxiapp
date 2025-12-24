@@ -1,105 +1,222 @@
-import axios from "axios";
-import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
-import BASE_URL from "@/utils/config";
-interface Taxi {
-  PlateNo: string;
-}
+import { AssignedTaxi, Taxi } from '@/type';
+import BASE_URL from '@/utils/config';
+import { formatDateTime } from '@/utils/time-formatter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 export default function AvailableTaxi() {
   const [taxis, setTaxis] = useState<Taxi[]>([]);
-  const [assignedtaxis, setAssignedTaxis] = useState<Taxi[]>([]);
-  const [queuedPlates, setQueuedPlates] = useState<string[]>([]); 
- const [route, setRoute] = useState<string | null>(null);
-  const addToQueue = async (PlateNo: string) => {
+  const [taxi, setTaxi] = useState<Taxi[]>([]);
+  const [assignedtaxis, setAssignedTaxis] = useState<AssignedTaxi[]>([]);
+  const [queuedPlates, setQueuedPlates] = useState<number[]>([]);
+  const [route, setRoute] = useState<string | null>(null);
+
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+  const isMounted = useRef(true);
+  const intervalRef = useRef<any>(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Reset state when screen comes into focus
+      setTaxis([]);
+      setAssignedTaxis([]);
+      setQueuedPlates([]);
+      setRoute(null);
+
+      // Fetch fresh data
+      fetchRoute();
+      fetchQueueState();
+      fetchTaxis();
+      fetchAssignedTaxis();
+      return () => {
+        // Cleanup if needed
+      };
+    }, [])
+  );
+
+  // Combined refresh function
+  const refreshAllData = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
+      await Promise.all([
+        fetchQueueState(),
+        fetchTaxis(),
+        fetchAssignedTaxis(),
+      ]);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    }
+  };
+
+  const addToQueue = async (PlateNo: number) => {
+    console.log(PlateNo, assignedtaxis);
+
+    try {
+      const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
       await axios.post(
         `${BASE_URL}/taxi-queue`,
-        { PlateNo,route:route },
+        { PlateNo, route },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      alert(`Taxi ${PlateNo} added to queue`);
+      Alert.alert('Success', `Taxi ${PlateNo} added to queue`);
+      await refreshAllData();
 
-    
-      setQueuedPlates((prev) => [...prev, PlateNo]);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to add taxi");
+      // sendSMS();
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        Alert.alert(
+          'Taxi Unavailable',
+          'This taxi is already in the queue with another station.'
+        );
+      } else {
+        Alert.alert('Error', 'Failed to add taxi');
+      }
+    }
+
+    const matchedTaxi = assignedtaxis.find((t) => t.PlateNo === PlateNo);
+
+    const taxi: Taxi = await fetchTaxi(PlateNo.toString());
+    if (!taxi || !matchedTaxi) {
+      Alert.alert('Error', `No taxi found with plate number ${PlateNo}`);
+      return;
+    } else {
+      const formattedTime = formatDateTime(matchedTaxi.time);
+
+      const message = `
+        Queue Update
+
+        Plate Number: ${taxi.PlateNo}
+        Original Route: ${matchedTaxi.from_route}
+        Temporary Route: ${matchedTaxi.to_route}
+        Assigned On: ${formattedTime}
+
+        ***IMPORTANT***
+        CHECK THE TIME FOR CONFIRMATION.
+        This message is valid ONLY for the date and time shown.
+
+        Please proceed to the designated pickup point.
+        `.trim();
+
+      Alert.alert('Success', `Taxi ${PlateNo} added to queue`);
+      sendSMS(taxi.PhoneNo, message);
+
+      // Refresh immediately after adding
+      await refreshAllData();
     }
   };
 
-   const fetchRoute = async () => {
+  const fetchTaxi = async (plateNo: string) => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return Alert.alert("Error", "No token found");
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Error', 'No token found');
+        return;
+      }
+
+      const res = await axios.get(
+        `${BASE_URL}/assignTaxis/fetch-taxi/${plateNo}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setTaxi(res.data);
+      return res.data;
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to fetch assigned route');
+    }
+  };
+
+  const fetchRoute = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return Alert.alert('Error', 'No token found');
 
       const res = await axios.get(`${BASE_URL}/dispacher-route`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setRoute(res.data.route); 
+      setRoute(res.data.route);
     } catch (err: any) {
       console.error(err);
-      Alert.alert("Error", "Failed to fetch assigned route");
+      Alert.alert('Error', 'Failed to fetch assigned route');
     }
   };
-
 
   useEffect(() => {
-     fetchRoute();
-    }, []);
+    fetchRoute();
 
-
-  
+    // Cleanup on unmount
+    // return () => {
+    //   isMounted.current = false;
+    //   if (intervalRef.current) {
+    //     clearInterval(intervalRef.current);
+    //   }
+    // };
+  }, []);
 
   const fetchTaxis = async () => {
-  try {
-    const token = await AsyncStorage.getItem("token");
-    if (!token || !route) return;
-
-    const res = await axios.get(
-      `${BASE_URL}/taxis?route=${encodeURIComponent(route)}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    setTaxis(res.data);
-  } catch (err) {
-    console.error("Failed to fetch taxis:", err);
-  }
-};
-
-
-   const fetchAssignedTaxis = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-        if (!route) return;
-       const res = await axios.get(
-      `${BASE_URL}/assignTaxis/assignedTaxis?route=${encodeURIComponent(route)}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+      const token = await AsyncStorage.getItem('token');
+      if (!token || !route) return;
 
-      setAssignedTaxis(res.data);
+      const res = await axios.get(
+        `${BASE_URL}/taxis?route=${encodeURIComponent(route)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (isMounted.current) {
+        console.log(res.data);
+        setTaxis(res.data);
+      }
     } catch (err) {
-      console.error("Failed to fetch taxis:", err);
+      console.error('Failed to fetch taxis:', err);
     }
   };
 
+  const fetchAssignedTaxis = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token || !route) return;
 
+      const res = await axios.get(
+        `${BASE_URL}/assignTaxis/assignedTaxis?route=${encodeURIComponent(
+          route
+        )}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (isMounted.current) {
+        setAssignedTaxis(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch assigned taxis:', err);
+    }
+  };
 
   const fetchQueueState = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
       const res = await axios.get(`${BASE_URL}/taxi-queue`, {
@@ -107,190 +224,520 @@ export default function AvailableTaxi() {
       });
 
       const activePlates = res.data.map((t: Taxi) => t.PlateNo);
-      setQueuedPlates(activePlates);
+
+      if (isMounted.current) {
+        setQueuedPlates(activePlates);
+      }
     } catch (err) {
-      console.error("Failed to sync queue state:", err);
+      console.error('Failed to sync queue state:', err);
     }
   };
 
+  // Set up auto-refresh when route is available
   useEffect(() => {
-    fetchQueueState();
-   fetchAssignedTaxis();
+    if (route) {
+      // Initial fetch
+      refreshAllData();
+
+      // Clear any existing interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      // Set up polling interval (every 3 seconds for real-time updates)
+      intervalRef.current = setInterval(() => {
+        if (isMounted.current) {
+          refreshAllData();
+        }
+      }, 1000000);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [route]);
+
+  // Refresh when screen comes into focus
+  // useFocusEffect(
+  //   React.useCallback(() => {
+  //     if (route) {
+  //       refreshAllData();
+  //     }
+  //   }, [route])
+  // );
+
+  const fetchTaxisQueue = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token || !route) return;
+
+      const res = await axios.get(
+        `${BASE_URL}/taxi-queue?route=${encodeURIComponent(route)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (isMounted.current) {
+        setTaxis(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch taxis:', err);
+    }
+  };
+  useEffect(() => {
+    fetchTaxisQueue();
+
+    // Cleanup on unmount
+    // return () => {
+    //   isMounted.current = false;
+    //   if (intervalRef.current) {
+    //     clearInterval(intervalRef.current);
+    //   }
+    // };
   }, []);
 
-  useEffect(()=>{
-    if(route){
-       fetchTaxis();
-    }
-  },[route])
+  const sendSMS = async (phone: string, message: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
 
-  useEffect(()=>{
-   fetchAssignedTaxis()
-    const interval = setInterval( fetchAssignedTaxis,500000);
-    return () => clearInterval(interval);
-  })
+      const res = await axios.post(
+        `${BASE_URL}/api/send-sms`,
+        {
+          phone: phone,
+          message: message,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error('SMS failed:', error.response?.data || error.message);
+    }
+  };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-       <Pressable
-        style={styles.backButton}
-        onPress={() => router.push("/(tabs)/taxiDispacher")}
-      >
-        <Text style={styles.backText}>←</Text>
-      </Pressable>
-      <Text style={styles.title}>Available Taxis</Text>
-
-      {taxis.length === 0 ? (
-        <Text style={styles.empty}>No taxis available</Text>
-      ) : (
-        taxis.map((t, index) => {
-          const isQueued = queuedPlates.includes(t.PlateNo);
-
-          return (
-            <View key={index} style={styles.card}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={styles.label}>
-                  Taxi: <Text style={styles.value}>{t.PlateNo}</Text>
-                </Text>
-
-                <Pressable
-                  style={[
-                    styles.button,
-                    isQueued && styles.buttonDisabled,
-                  ]}
-                  disabled={isQueued}
-                  onPress={() => addToQueue(t.PlateNo)}
-                >
-                  <Text style={styles.buttonText}>
-                    {isQueued ? "Added" : "Add to Queue"}
-                  </Text>
-                </Pressable>
-                
-              </View>
-              
-            </View>
-            
-          );
-        })
-      )}
-            <View style={{ marginTop: 20 }}>
+    <View style={styles.container}>
+      {/* Header Section */}
+      <View style={styles.header}>
         <Pressable
-          style={styles.button}
-          onPress={fetchAssignedTaxis}
+          style={[styles.backButton, isMobile && styles.backButtonMobile]}
+          onPress={() => router.push('/(tabs)/taxiDispacher')}
         >
-          <Text style={styles.buttonText}>Assigned Taxis</Text>
+          <Text style={styles.backText}>← Back</Text>
         </Pressable>
-
-        {assignedtaxis.length === 0 ? (
-          <Text style={styles.empty}>No assigned taxis yet</Text>
-        ) : (
-          assignedtaxis.map((t, index) => {
-              const isQueued = queuedPlates.includes(t.PlateNo);
-              return(
-                   <View key={index} style={styles.card}>
-              <Text style={styles.label}>
-                Taxi: <Text style={styles.value}>{t.PlateNo}</Text>
-              </Text>
-              <Pressable
-                  style={[
-                    styles.button,
-                    isQueued && styles.buttonDisabled,
-                  ]}
-                  disabled={isQueued}
-                  onPress={() => addToQueue(t.PlateNo)}
-                >
-                  <Text style={styles.buttonText}>
-                    {isQueued ? "Added" : "Add to Queue"}
-                  </Text>
-                </Pressable>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>Taxis List</Text>
+          {route && (
+            <View style={styles.routeBadge}>
+              <Text style={styles.routeText}>Route: {route}</Text>
             </View>
           )}
-        ))}
+        </View>
+
+        {/* Refresh Button */}
+        <Pressable
+          style={[styles.refreshButton, isMobile && styles.refreshButtonMobile]}
+          onPress={refreshAllData}
+        >
+          <Text style={styles.refreshButtonText}>⟳ Refresh</Text>
+        </Pressable>
       </View>
-    </ScrollView>
+
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Auto-refresh indicator */}
+        <View style={styles.autoRefreshIndicator}>
+          <Text style={styles.autoRefreshText}>
+            Auto-refreshing every 3 seconds
+          </Text>
+        </View>
+
+        {/* Available Taxis Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>My Taxis</Text>
+            <Text style={styles.sectionSubtitle}>
+              {taxis.length} taxis registered • Updated just now
+            </Text>
+          </View>
+
+          {taxis.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>🚕</Text>
+              <Text style={styles.emptyText}>No taxis available</Text>
+              <Text style={styles.emptySubtext}>
+                Check back later for available taxis
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.grid, isMobile && styles.gridMobile]}>
+              {taxis.map((t, index) => {
+                console.log(taxis);
+
+                const isQueued = queuedPlates.includes(t.PlateNo);
+                console.log('Taxi ID:', t.id, typeof t.id, isQueued);
+
+                return (
+                  <View
+                    key={index}
+                    style={[styles.taxiCard, isMobile && styles.taxiCardMobile]}
+                  >
+                    <View style={styles.taxiCardHeader}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          router.push(`/(tabs)/taxidetailpage/${t.id}`)
+                        }
+                        style={styles.plateContainer}
+                      >
+                        <Text style={styles.plateLabel}>TAXI PLATE</Text>
+                        <Text style={styles.plateNumber}>{t.PlateNo}</Text>
+                      </TouchableOpacity>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          isQueued && styles.statusBadgeQueued,
+                        ]}
+                      >
+                        <Text style={styles.statusText}>
+                          {isQueued ? 'In Queue' : 'Available'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      style={[
+                        styles.actionButton,
+                        isQueued && styles.actionButtonDisabled,
+                      ]}
+                      disabled={isQueued}
+                      onPress={() => addToQueue(t.PlateNo)}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {isQueued ? '✓ Added to Queue' : '+ Add to Queue'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Assigned Taxis Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Assigned Taxis</Text>
+            <Text style={styles.sectionSubtitle}>
+              {assignedtaxis.length} taxis assigned to your route
+            </Text>
+          </View>
+
+          {assignedtaxis.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyText}>No assigned taxis</Text>
+              <Text style={styles.emptySubtext}>
+                Assign taxis to see them here
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.grid, isMobile && styles.gridMobile]}>
+              {assignedtaxis.map((t, index) => {
+                const isQueued = queuedPlates.includes(t.PlateNo);
+                return (
+                  <View
+                    key={index}
+                    style={[styles.taxiCard, isMobile && styles.taxiCardMobile]}
+                  >
+                    <View style={styles.taxiCardHeader}>
+                      <View style={styles.plateContainer}>
+                        <Text style={styles.plateLabel}>ASSIGNED TAXI</Text>
+                        <Text style={styles.plateNumber}>{t.PlateNo}</Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          isQueued && styles.statusBadgeQueued,
+                        ]}
+                      >
+                        <Text style={styles.statusText}>
+                          {isQueued ? 'In Queue' : 'Available'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      style={[
+                        styles.actionButton,
+                        isQueued && styles.actionButtonDisabled,
+                      ]}
+                      disabled={isQueued}
+                      onPress={() => addToQueue(t.PlateNo)}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {isQueued ? '✓ Added to Queue' : '+ Add to Queue'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+        <Pressable
+          style={[styles.actionButton]}
+
+          // onPress={() =>sendSMS()}
+        >
+          <Text style={styles.actionButtonText}>Send SMS</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
-
-
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    backgroundColor: "#ffffff",
+    flex: 1,
+    backgroundColor: '#F8FAFC',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 15,
-    color: "#003B73",
-  },
-
-  /* Back Button */
-  backButton: {
-    backgroundColor: "#005BBB",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    marginBottom: 20,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    color: "white",
-    fontSize: 25,
-    fontWeight: "600",
-  },
-
-  empty: {
-    fontSize: 18,
-    fontStyle: "italic",
-    color: "gray",
-    textAlign: "center",
-    marginTop: 20,
-  },
-
-  card: {
-    backgroundColor: "#e6f2ff",
-    padding: 18,
-    borderRadius: 15,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "#b3d9ff",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 3,
   },
-
-  label: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#003B73",
+  headerContent: {
+    marginTop: 16,
+    alignItems: 'center',
   },
-
-  value: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#005BBB",
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 24,
+    zIndex: 10,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-
-  button: {
-    backgroundColor: "#005BBB",
+  backButtonMobile: {
+    top: 40,
     paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    alignSelf: "center",
+    paddingHorizontal: 12,
   },
-
-  buttonDisabled: {
-    backgroundColor: "#9BBBD4",
-  },
-
-  buttonText: {
-    color: "white",
-    fontWeight: "700",
+  backText: {
+    color: '#475569',
     fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1E293B',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  routeBadge: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#0EA5E9',
+  },
+  routeText: {
+    color: '#0369A1',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  refreshButton: {
+    position: 'absolute',
+    top: 60,
+    right: 24,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  refreshButtonMobile: {
+    top: 40,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  refreshButtonText: {
+    color: '#475569',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 24,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionHeader: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    marginBottom: 16,
+  },
+  autoRefreshIndicator: {
+    backgroundColor: '#E0F2FE',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  autoRefreshText: {
+    color: '#0369A1',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  gridMobile: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+  taxiCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    flex: 1,
+    minWidth: 300,
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  taxiCardMobile: {
+    minWidth: '100%',
+    maxWidth: '100%',
+  },
+  taxiCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  plateContainer: {
+    flex: 1,
+  },
+  plateLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  plateNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+    letterSpacing: 1,
+  },
+  statusBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusBadgeQueued: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#166534',
+  },
+  actionButton: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.25,
+  },
+  emptyState: {
+    backgroundColor: '#FFFFFF',
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
   },
 });
-
