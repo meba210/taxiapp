@@ -1,75 +1,60 @@
-import React, { useEffect, useRef } from "react";
-import { Animated, View, Image, StyleSheet, Dimensions } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter } from 'expo-router';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, Easing, StyleSheet, View } from 'react-native';
 
-const screenWidth = Dimensions.get("window").width;
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function SplashScreen() {
   const router = useRouter();
-  const moveAnim = useRef(new Animated.Value(-200)).current; 
- const scaleAnim = useRef(new Animated.Value(0)).current;  
-  const fadeAnim = useRef(new Animated.Value(0)).current; 
-    const translateY = useRef(new Animated.Value(30)).current; 
- useEffect(() => {
-    
-     Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 3,       
-        tension: 100,       
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1500,
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.timing(translateY, {
-          toValue: -10,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
+  const logoScale = useRef(new Animated.Value(0.85)).current;
+  const logoOpacity = useRef(new Animated.Value(1)).current;
+  const taxiX = useRef(new Animated.Value(-screenWidth)).current;
 
-    setTimeout(() => {
-      Animated.timing(moveAnim, {
-        toValue: screenWidth,
-        duration: 5000,
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      Animated.spring(logoScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 110,
         useNativeDriver: true,
       }).start(() => {
-      
-        router.replace("/(tabs)/profile");
+        setTimeout(() => {
+          Animated.timing(taxiX, {
+            toValue: screenWidth * 1.4,
+            duration: 1800,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }).start(() => {
+            router.replace('/(tabs)/profile');
+          });
+        }, 500);
       });
-    }, 2000);
+    });
   }, []);
-
 
   return (
     <View style={styles.container}>
-       <Animated.Image
-        source={require("@/assets/images/taxi3.png")}
+      <Animated.Image
+        source={require('@/assets/images/taxi3.png')}
+        resizeMode="contain"
         style={[
           styles.logo,
           {
-            opacity: fadeAnim,
-            transform: [
-              { scale: scaleAnim },
-              { translateY: translateY },
-            ],
+            opacity: logoOpacity,
+            transform: [{ scale: logoScale }],
           },
         ]}
       />
+
       <Animated.Image
-        source={require("@/assets/images/taxi2.png")}
-        style={[styles.taxi, { transform: [{ translateX: moveAnim }, { rotate: "5deg" }]
-}]}
+        source={require('@/assets/images/taxi2.png')}
+        resizeMode="contain"
+        style={[
+          styles.taxi,
+          {
+            transform: [{ translateX: taxiX }, { rotate: '5deg' }],
+          },
+        ]}
       />
     </View>
   );
@@ -78,20 +63,27 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    overflow: 'hidden',
   },
   logo: {
-    width: 300,
-    height: 300,
-    marginBottom: 30,
+    width: Math.min(screenWidth * 0.8, 400),
+    height: Math.min(screenHeight * 0.4, 400),
+    marginBottom: screenHeight * 0.05,
   },
   taxi: {
-       width: 200, 
-    height: 200, 
-    resizeMode: "contain",
-    position: "absolute",
-    bottom: 100,
+    width: Math.min(screenWidth * 0.5, 250),
+    height: Math.min(screenHeight * 0.25, 250),
+    position: 'absolute',
+    bottom: screenHeight * 0.15,
+    left: 0,
   },
 });

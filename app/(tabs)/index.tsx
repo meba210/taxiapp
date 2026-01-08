@@ -1,21 +1,13 @@
-import { Image } from 'expo-image';
-import { Button, Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
-import LoginPage from '@/components/ui/login';
 import SplashScreen from '@/app/SplashScreen';
+import LoginPage from '@/components/ui/login';
 import React from 'react';
+import { StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
   return (
     <>
-    <LoginPage/>
-    <SplashScreen/>
-   
+      <LoginPage />
+      <SplashScreen />
     </>
   );
 }
@@ -30,5 +22,4 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
- 
 });
