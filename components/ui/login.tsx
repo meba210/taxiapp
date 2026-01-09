@@ -1,226 +1,40 @@
-// import React, { useState } from "react";
-// import {
-//   StyleSheet,
-//   View,
-//   TextInput,
-//   Text,
-//   Pressable,
-//   TouchableOpacity,
-//   Alert,
-// } from "react-native";
-// import { useRouter } from "expo-router";
-// import axios from "axios";
-// import BASE_URL from "@/utils/config";
-// import AsyncStorage from "@react-native-async-storage/async-storage";
-// import { Feather } from "@expo/vector-icons"; 
-
-// export default function LoginPage() {
-//   const router = useRouter();
-//   const [username, setUsername] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [loading, setLoading] = useState(false);
-//   const [showPassword, setShowPassword] = useState(false); // For toggling password
-
-//   const handleLogin = async () => {
-//     if (!username || !password) {
-//       Alert.alert("Error", "Please enter username and password");
-//       return;
-//     }
-
-//     try {
-//       setLoading(true);
-//       console.log("url:", BASE_URL);
-//       const res = await axios.post(
-//         `${BASE_URL}/auth/login`,
-//         { UserName: username, Password: password },
-//         {
-//           withCredentials: true,
-//         }
-//       );
-
-//       const { role, token } = res.data;
-
-//       if (!token) {
-//         Alert.alert("Login Failed", "No token returned from server");
-//         return;
-//       }
-
-//       await AsyncStorage.setItem("token", token);
-
-//       // Navigate based on role
-//       if (role === "dispacher") router.push("/taxiDispacher");
-//       else Alert.alert("Error", "Unknown role!");
-//     } catch (err: any) {
-//       console.error(err);
-//       Alert.alert(
-//         "Login Failed",
-//         err.response?.data?.message || "Something went wrong"
-//       );
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   return (
-//     <View style={styles.login}>
-//       <View style={styles.container}>
-//         <Text style={styles.title}>LOGIN PAGE</Text>
-
-//         <TextInput
-//           style={styles.input}
-//           placeholder="Username"
-//           value={username}
-//           onChangeText={setUsername}
-//         />
-
-//         <View style={styles.passwordContainer}>
-//           <TextInput
-//             style={[styles.input, { flex: 1 }]}
-//             placeholder="Password"
-//             secureTextEntry={!showPassword}
-//             value={password}
-//             onChangeText={setPassword}
-//           />
-//           <TouchableOpacity
-//             onPress={() => setShowPassword(!showPassword)}
-//             style={styles.eyeIcon}
-//           >
-//             <Feather
-//               name={showPassword ? "eye" : "eye-off"}
-//               size={20}
-//               color="#4169e1"
-//             />
-//           </TouchableOpacity>
-//         </View>
-
-//         <Pressable
-//           style={({ pressed }) => [
-//             styles.button,
-//             pressed && { backgroundColor: "#005BBB" },
-//           ]}
-//           onPress={handleLogin}
-//           disabled={loading}
-//         >
-//           <Text style={styles.buttonText}>
-//             {loading ? "Logging in..." : "Log In"}
-//           </Text>
-//         </Pressable>
-
-//         <TouchableOpacity>
-//           <Text style={styles.linkText}>Forgot password?</Text>
-//         </TouchableOpacity>
-//       </View>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   login: {
-//     flex: 1,
-//     justifyContent: "center",
-//     alignItems: "center",
-//     backgroundColor: "#f0f4f8",
-//     paddingHorizontal: 20,
-//   },
-//   container: {
-//     width: "100%",
-//     maxWidth: 400,
-//     backgroundColor: "#ffffff",
-//     borderRadius: 20,
-//     paddingVertical: 40,
-//     paddingHorizontal: 30,
-//     shadowColor: "#000",
-//     shadowOffset: { width: 0, height: 4 },
-//     shadowOpacity: 0.1,
-//     shadowRadius: 10,
-//     elevation: 5,
-//   },
-//   title: {
-//     fontSize: 32,
-//     fontWeight: "700",
-//     color: "#4169e1",
-//     textAlign: "center",
-//     marginBottom: 30,
-//   },
-//   input: {
-//     borderColor: "#4169e1",
-//     borderWidth: 2,
-//     borderRadius: 25,
-//     fontSize: 18,
-//     height: 50,
-//     paddingHorizontal: 15,
-//     marginBottom: 20,
-//     color: "#000",
-//   },
-//   passwordContainer: {
-//     flexDirection: "row",
-//     alignItems: "center",
-//     marginBottom: 20,
-//   },
-//   eyeIcon: {
-//     position: "absolute",
-//     right: 15,
-//     padding: 5,
-//   },
-//   button: {
-//     width: "100%",
-//     height: 50,
-//     backgroundColor: "#4169e1",
-//     borderRadius: 25,
-//     justifyContent: "center",
-//     alignItems: "center",
-//     marginVertical: 10,
-//   },
-//   buttonText: {
-//     color: "#fff",
-//     fontSize: 18,
-//     fontWeight: "600",
-//   },
-//   linkText: {
-//     color: "#4169e1",
-//     textAlign: "center",
-//     marginTop: 15,
-//     fontSize: 16,
-//   },
-// });
-
-import BASE_URL from "@/utils/config";
-import { Feather } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useAuth } from '@/auth/auth-context';
+import BASE_URL from '@/utils/config';
+import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
 
 import {
   Alert,
   Animated,
-  Dimensions,
   Easing,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from "react-native";
-const { width, height } = Dimensions.get("window");
-const isWeb = Platform.OS === "web";
+  View,
+} from 'react-native';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Animation values
+
+  const { setToken } = useAuth();
+
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(30)).current;
-  const [isFocused, setIsFocused] = useState({ username: false, password: false });
+  const [isFocused, setIsFocused] = useState({
+    username: false,
+    password: false,
+  });
 
   React.useEffect(() => {
-    // Entrance animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -233,13 +47,11 @@ export default function LoginPage() {
         duration: 600,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
-      })
+      }),
     ]).start();
   }, []);
 
- 
-
- const handleLogin = async () => {
+  const handleLogin = async () => {
     if (!username || !password) {
       Alert.alert('Error', 'Please enter username and password');
       return;
@@ -252,22 +64,24 @@ export default function LoginPage() {
         Password: password,
       });
 
-      const { token, role, userId, mustChangePassword } = res.data;
+      const { token, role, userId, mustChangePassword, route } = res.data;
 
       if (!token || !userId) {
         Alert.alert('Login Failed', 'Invalid login response');
         return;
       }
 
-      // Store session
-      await AsyncStorage.multiSet([
-        ['token', token],
-        ['id', userId.toString()],
-        ['role', role],
-        ['mustChangePassword', String(mustChangePassword)],
-      ]);
+      await AsyncStorage.setItem('token', token);
+      await AsyncStorage.setItem('route', route);
+      setToken(token);
 
-      // Dispatcher flow
+      const checkToken = await AsyncStorage.getItem('token');
+
+      if (!checkToken) {
+        Alert.alert('Storage Error', 'Token was not saved');
+        return;
+      }
+
       if (role === 'dispacher') {
         if (mustChangePassword) {
           router.replace('/changePassword');
@@ -290,77 +104,68 @@ export default function LoginPage() {
 
   return (
     <View style={styles.login}>
-      {/* Decorative Background Elements */}
       <View style={styles.decorationTopLeft} />
       <View style={styles.decorationBottomRight} />
       <View style={styles.circleDecoration} />
-      
-      {/* Animated Login Container */}
-      <Animated.View 
+
+      <Animated.View
         style={[
           styles.container,
           {
             opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }]
-          }
+            transform: [{ translateY: slideAnim }],
+          },
         ]}
       >
-        {/* Logo Header */}
         <View style={styles.logoSection}>
           <View style={styles.logoCircle}>
             <Feather name="shield" size={40} color="#FFFFFF" />
           </View>
           <Text style={styles.brandTitle}>TAXI DISPATCH</Text>
-          <Text style={styles.brandSubtitle}>Professional Transport Management</Text>
+          <Text style={styles.brandSubtitle}>
+            Professional Transport Management
+          </Text>
         </View>
 
         <Text style={styles.title}>Secure Access Portal</Text>
 
-        {/* Username Input */}
         <View style={styles.inputWrapper}>
           <View style={styles.inputIconContainer}>
-            <Feather 
-              name="user" 
-              size={20} 
-              color={isFocused.username ? "#4169e1" : "#94A3B8"} 
+            <Feather
+              name="user"
+              size={20}
+              color={isFocused.username ? '#4169e1' : '#94A3B8'}
             />
           </View>
           <TextInput
-            style={[
-              styles.input,
-              isFocused.username && styles.inputFocused
-            ]}
+            style={[styles.input, isFocused.username && styles.inputFocused]}
             placeholder="Enter your username"
             placeholderTextColor="#94A3B8"
             value={username}
             onChangeText={setUsername}
-            onFocus={() => setIsFocused({...isFocused, username: true})}
-            onBlur={() => setIsFocused({...isFocused, username: false})}
+            onFocus={() => setIsFocused({ ...isFocused, username: true })}
+            onBlur={() => setIsFocused({ ...isFocused, username: false })}
             editable={!loading}
           />
         </View>
 
-        {/* Password Input */}
         <View style={styles.inputWrapper}>
           <View style={styles.inputIconContainer}>
-            <Feather 
-              name="lock" 
-              size={20} 
-              color={isFocused.password ? "#4169e1" : "#94A3B8"} 
+            <Feather
+              name="lock"
+              size={20}
+              color={isFocused.password ? '#4169e1' : '#94A3B8'}
             />
           </View>
           <TextInput
-            style={[
-              styles.input,
-              isFocused.password && styles.inputFocused
-            ]}
+            style={[styles.input, isFocused.password && styles.inputFocused]}
             placeholder="Enter your password"
             placeholderTextColor="#94A3B8"
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
-            onFocus={() => setIsFocused({...isFocused, password: true})}
-            onBlur={() => setIsFocused({...isFocused, password: false})}
+            onFocus={() => setIsFocused({ ...isFocused, password: true })}
+            onBlur={() => setIsFocused({ ...isFocused, password: false })}
             editable={!loading}
           />
           <TouchableOpacity
@@ -369,19 +174,18 @@ export default function LoginPage() {
             disabled={loading}
           >
             <Feather
-              name={showPassword ? "eye" : "eye-off"}
+              name={showPassword ? 'eye' : 'eye-off'}
               size={20}
-              color={isFocused.password ? "#4169e1" : "#94A3B8"}
+              color={isFocused.password ? '#4169e1' : '#94A3B8'}
             />
           </TouchableOpacity>
         </View>
 
-        {/* Login Button */}
         <Pressable
           style={({ pressed }) => [
             styles.button,
             pressed && styles.buttonPressed,
-            loading && styles.buttonDisabled
+            loading && styles.buttonDisabled,
           ]}
           onPress={handleLogin}
           disabled={loading}
@@ -394,24 +198,20 @@ export default function LoginPage() {
           ) : (
             <>
               <Text style={styles.buttonText}>Sign In</Text>
-              <Feather name="arrow-right" size={20} color="#FFFFFF" style={styles.buttonArrow} />
+              <Feather
+                name="arrow-right"
+                size={20}
+                color="#FFFFFF"
+                style={styles.buttonArrow}
+              />
             </>
           )}
         </Pressable>
 
-        {/* Forgot Password */}
-        {/* <TouchableOpacity style={styles.forgotContainer} disabled={loading}>
-          <Feather name="key" size={16} color="#4169e1" />
-          <Text style={styles.linkText}>Forgot password?</Text>
-        </TouchableOpacity> */}
-
-        {/* Security Info */}
-       
-
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            © {new Date().getFullYear()} Taxi Dispatch System. v2.4
+            © {new Date().getFullYear()} Taxi Dispatch System. v1.0
           </Text>
           <View style={styles.footerDot} />
           <Text style={styles.footerText}>All rights reserved</Text>
@@ -424,9 +224,9 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   login: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F8FAFC",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 20,
     position: 'relative',
     overflow: 'hidden',
@@ -459,16 +259,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(65, 105, 225, 0.02)',
   },
   container: {
-    width: "100%",
+    width: '100%',
     maxWidth: 440,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingVertical: 48,
     paddingHorizontal: 40,
-    shadowColor: "#000",
-    shadowOffset: { 
-      width: 0, 
-      height: 20 
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 20,
     },
     shadowOpacity: 0.1,
     shadowRadius: 30,
@@ -545,9 +345,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   button: {
-    width: "100%",
+    width: '100%',
     height: 56,
-    backgroundColor: "#4169e1",
+    backgroundColor: '#4169e1',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -561,11 +361,11 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   buttonPressed: {
-    backgroundColor: "#3155B0",
+    backgroundColor: '#3155B0',
     transform: [{ scale: 0.98 }],
   },
   buttonDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: '#94A3B8',
     shadowColor: '#94A3B8',
   },
   loadingContainer: {
@@ -580,17 +380,13 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     borderTopColor: 'transparent',
     marginRight: 10,
-    // animationKeyframes: {
-    //   '0%': { transform: [{ rotate: '0deg' }] },
-    //   '100%': { transform: [{ rotate: '360deg' }] },
-    // },
     animationDuration: '1s',
     animationIterationCount: 'infinite',
   },
   buttonText: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   buttonArrow: {
@@ -603,7 +399,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   linkText: {
-    color: "#4169e1",
+    color: '#4169e1',
     fontSize: 15,
     fontWeight: '600',
     marginLeft: 8,

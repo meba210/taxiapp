@@ -1,498 +1,778 @@
-
-import TaxiRegistration from "@/components/ui/taxiRegistrationModal";
-import BASE_URL from "@/utils/config";
+import NotificationBell from '@/components/ui/NotificationBell';
+import TaxiRegistration from '@/components/ui/taxiRegistrationModal';
+import { useAssignedRoute } from '@/hooks/use-assigned-route';
+import { useAvailableTaxis } from '@/hooks/use-available.taxis';
+import { useCurrentPassengers } from '@/hooks/use-current-passengers';
+import { usePassengerQueue } from '@/hooks/use-passenger-queue';
+import { useRemoveTaxi } from '@/hooks/use-remove-taxi';
+import { useTaxiQueue } from '@/hooks/use-taxi-queue';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  Feather,
-  Ionicons,
-  MaterialCommunityIcons
-} from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
-import axios from "axios";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Alert, Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { TextInput } from "react-native-gesture-handler";
-const { width, height } = Dimensions.get("window");
-const isWeb = Platform.OS === "web";
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { TextInput } from 'react-native-gesture-handler';
 
 export default function TaxiDispatcher() {
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [queue, setQueue] = useState<{
-    assigned: any; PlateNo: string;   status?: string;  to_route?: string | null;
-  }[]>([]);
-  const [WaitingCount, setWaitingCount] = useState("");
-  const [Status, setStatus] = useState("");
-  const [route, setRoute] = useState<string | null>(null);
-  //const [to_route, setto_Route] = useState<string | null>(null);
-  const [passengerId, setPassengerId] = useState<number | null>(null);
-  const [assignedRoute, setAssignedRoute] = useState<string | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
-const[currentpassengers,setCurrentPassengers]= useState< number |null>(null);
-const[availabletaxis,setAvailableTaxis]= useState< number |null>(null);
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isLargeScreen = width >= 1024;
+  const isExtraLargeScreen = width >= 1200;
 
-
-
-
-useFocusEffect(
-  React.useCallback(() => {
-    // Reset state when screen comes into focus
-    setQueue([]);
-    setWaitingCount("");
-    setStatus("");
-    setRoute(null);
-    setPassengerId(null);
-    setAssignedRoute(null);
-    
-    // Fetch fresh data
-    fetchRoute();
-    fetchAssignedRoute();
-    fetchUserProfile();
-    fetchQueue();
-    return () => {
-      // Cleanup if needed
-    };
-  }, [])
-);
-  // Fetch user profile
-  const fetchUserProfile = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-
-      const res = await axios.get(`${BASE_URL}/profile`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setUserProfile(res.data);
-    } catch (err) {
-      console.error("Failed to fetch profile:", err);
-    }
+  const containerWidth = isExtraLargeScreen
+    ? '80%'
+    : isLargeScreen
+    ? '85%'
+    : isTablet
+    ? '90%'
+    : '95%';
+  const iconSize = {
+    small: isMobile ? 16 : isTablet ? 18 : 20,
+    medium: isMobile ? 20 : isTablet ? 22 : 24,
+    large: isMobile ? 24 : isTablet ? 28 : 32,
+    xlarge: isMobile ? 28 : isTablet ? 32 : 40,
+  };
+  const fontSize = {
+    xs: isMobile ? 10 : isTablet ? 11 : 12,
+    sm: isMobile ? 12 : isTablet ? 14 : 16,
+    md: isMobile ? 14 : isTablet ? 16 : 18,
+    lg: isMobile ? 16 : isTablet ? 18 : 20,
+    xl: isMobile ? 18 : isTablet ? 20 : 22,
+    '2xl': isMobile ? 20 : isTablet ? 24 : 28,
+    '3xl': isMobile ? 24 : isTablet ? 28 : 32,
   };
 
-  // Logout function
+  /** API call */
+  const { data: assignedRoutes, isLoading, error } = useAssignedRoute();
+  const {
+    data: currentPassengers,
+    isLoading: isCurrentPassengerLoading,
+    error: isCurrrentPassengerError,
+  } = useCurrentPassengers();
+  const {
+    data: availabletaxis,
+    isLoading: isAvailableTaxLoading,
+    error: isAvailableTaxisError,
+  } = useAvailableTaxis(assignedRoutes);
+  const {
+    data: taxiData,
+    isLoading: isTaxiDataLoading,
+    error: isTaxiDataError,
+  } = useTaxiQueue(assignedRoutes);
+
+  const { mutate: removeTaxi } = useRemoveTaxi();
+  const { mutateAsync: submitPassenger, isPending } = usePassengerQueue();
+
+  const [showModal, setShowModal] = useState(false);
+  const [WaitingCount, setWaitingCount] = useState('');
+
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const stationId = 78;
+
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem("token");
-      router.replace("/(tabs)/profile");
+      await AsyncStorage.clear();
+
+      setToken(null);
+
+      // useQueueStore.getState().reset();
+      // queryClient.clear();
+
+      router.replace('/(tabs)/profile');
     } catch (err) {
-      console.error("Failed to logout:", err);
-      Alert.alert("Error", "Failed to logout");
+      console.error('Failed to logout:', err);
+      Alert.alert('Error', 'Failed to logout');
     }
   };
 
- 
-  const fetchRoute = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return Alert.alert("Error", "No token found");
-
-      const res = await axios.get(`${BASE_URL}/dispacher-route`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setRoute(res.data.route);
-    } catch (err: any) {
-      console.error(err);
-      Alert.alert("Error", "Failed to fetch assigned route");
-    }
-  };
-
-  useEffect(() => {
-    fetchRoute();
-    fetchAssignedRoute();
-    fetchUserProfile();
-    const interval = setInterval(fetchQueue, 50000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchQueue = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token || !route) return;
-
-      // 1. First fetch all taxis currently in the queue
-      const queueRes = await axios.get(`${BASE_URL}/taxi-queue`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      // 2. Get the plate numbers from the queue
-      const queuedPlates = queueRes.data.map((taxi: any) => taxi.PlateNo);
-
-      // 3. Fetch assigned taxis but filter to only include those in the queue
-      const assignedRes = await axios.get(
-        `${BASE_URL}/assignTaxis/assigned?route=${encodeURIComponent(route)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // 4. Filter assigned taxis to only include those that are in the queue
-      const assignedList = assignedRes.data.filter((a: any) => 
-        queuedPlates.includes(a.PlateNo)
-      );
-
-      // 5. Merge the data - only show taxis that are in BOTH the queue and assigned list
-      const mergedQueue = queueRes.data.map((taxi: any) => {
-        const assignedRecord = assignedList.find(
-          (a: any) => a.PlateNo === taxi.PlateNo
-        );
-
-        return {
-          ...taxi,
-           assigned: assignedRecord && assignedRecord.from_route === route,
-             to_route: assignedRecord?.to_route || null,
-           
-        };
-      });
-
-      setQueue(mergedQueue);
-
-    } catch (err) {
-      console.error("Error fetching queue:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (route) {
-      fetchQueue();
-      const interval = setInterval(fetchQueue, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [route]);
-
-  const removeTaxi = async (plateNo: string) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-
-      await axios.delete(`${BASE_URL}/taxi-queue/${plateNo}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      await axios.delete(`${BASE_URL}/assignTaxis/${plateNo}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      fetchQueue();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to remove taxi");
-    }
+  const handleNotifications = async () => {
+    Alert.alert(
+      'Notifications',
+      `You have ${notificationCount} new notifications`
+    );
   };
 
   const handlePassengerSubmit = async () => {
+    const count = Number(WaitingCount);
+
+    if (!Number.isInteger(count) || count < 0) {
+      Alert.alert('Error', 'Passenger count must be a valid number');
+      return;
+    }
+
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-
-      if (!WaitingCount) {
-        alert("Please enter passenger count");
-        return;
-      }
-
       setIsUpdating(true);
-      
-      if (passengerId) {
-        await axios.put(
-          `${BASE_URL}/passengerqueue/${passengerId}`,
-          { waiting_count: WaitingCount },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        Alert.alert("Success", "Passenger count updated!");
-      } else {
-        const res = await axios.post(
-          `${BASE_URL}/passengerqueue`,
-          { waiting_count: WaitingCount, route: route },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        setPassengerId(res.data.id);
-        Alert.alert("Success", "Passenger count added!");
-      }
-      
-      setWaitingCount("");
+
+      const res = await submitPassenger(count);
+
+      Alert.alert(
+        'Success',
+        res.action === 'updated'
+          ? 'Passenger count updated!'
+          : 'Passenger count added!'
+      );
+
+      setWaitingCount('');
     } catch (err) {
       console.error(err);
-      Alert.alert("Error", "Failed to submit passenger count");
+      Alert.alert('Error', 'Failed to submit passenger count');
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const fetchAssignedRoute = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return Alert.alert("Error", "No token found");
+  const [token, setToken] = useState<string | null>(null);
 
-      const res = await axios.get(`${BASE_URL}/dispacher-route`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setAssignedRoute(res.data.route);
-    } catch (err: any) {
-      console.error(err);
-      Alert.alert("Error", "Failed to fetch assigned route");
-    }
-  };
-
- const fetchtaxis = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      
-      if (!token || !route) return Alert.alert("Error", "No token found");
-      // Use the component state `route` directly instead of redeclaring it
-      const res = await axios.get(`${BASE_URL}/taxis/available`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { route }
-      });
-
-     setAvailableTaxis(res.data.count);
-    } catch (err: any) {
-      console.error(err);
-      Alert.alert("Error", "Failed to fetch assigned route");
-    }
-  };
   useEffect(() => {
-         fetchtaxis ();
-      const interval = setInterval( fetchtaxis , 3000);
-      return () => clearInterval(interval);
-    
+    const loadToken = async () => {
+      const savedToken = await AsyncStorage.getItem('token');
+      if (!savedToken) {
+        Alert.alert('Error', 'No token found 33333333');
+        return;
+      }
+      setToken(savedToken);
+    };
+
+    loadToken();
   }, []);
 
-   const fetchCurrentPassengers = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return Alert.alert("Error", "No token found");
+  if (
+    isLoading ||
+    isCurrentPassengerLoading ||
+    isAvailableTaxLoading ||
+    isTaxiDataLoading
+  )
+    return <ActivityIndicator />;
 
-      const res = await axios.get(`${BASE_URL}/passengerqueue/current`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-     setCurrentPassengers(res.data.count);
-    } catch (err: any) {
-      console.error(err);
-      Alert.alert("Error", "Failed to fetch assigned route");
-    }
-  };
-  useEffect(() => {
-   
-      fetchCurrentPassengers ();
-      const interval = setInterval( fetchCurrentPassengers, 3000);
-      return () => clearInterval(interval);
-    
-  }, []);
+  if (
+    error ||
+    isCurrrentPassengerError ||
+    isAvailableTaxisError ||
+    isTaxiDataError
+  )
+    return <Text>Something went wrong</Text>;
 
   return (
-    <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-      {/* Header with Background */}
-      <View style={styles.headerContainer}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.headerLeftSection}>
-            {userProfile && (
-              <View style={styles.profileBadge}>
-                <Feather name="user" size={16} color="#FFFFFF" />
-                <Text style={styles.profileName}>{userProfile.name || userProfile.email}</Text>
-              </View>
-            )}
+    <ScrollView
+      style={styles.scrollContainer}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent}
+    >
+      <View
+        style={[
+          styles.headerContainer,
+          {
+            paddingVertical: isMobile ? 25 : isTablet ? 30 : 35,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.headerTopRow,
+            {
+              paddingHorizontal: isMobile ? 15 : isTablet ? 20 : 25,
+              marginBottom: isMobile ? 15 : 20,
+            },
+          ]}
+        >
+          <View style={[styles.headerRightSection, { gap: isMobile ? 8 : 12 }]}>
+            <Pressable
+              style={styles.notificationButton}
+              onPress={handleNotifications}
+            >
+              <NotificationBell stationId={stationId} />
+
+              {notificationCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable style={styles.logoutButton} onPress={handleLogout}>
+              <Feather name="log-out" size={iconSize.small} color="#FFFFFF" />
+              {!isMobile && <Text style={styles.logoutText}>Logout</Text>}
+            </Pressable>
           </View>
-          
-          <Pressable style={styles.logoutButton} onPress={handleLogout}>
-            <Feather name="log-out" size={18} color="#FFFFFF" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </Pressable>
         </View>
-        
-        <View style={styles.headerContent}>
-          <View style={styles.headerIconContainer}>
-            <MaterialCommunityIcons name="taxi" size={isWeb ? 40 : 34} color="#FFFFFF" />
+
+        <View
+          style={[
+            styles.headerContent,
+            { paddingHorizontal: isMobile ? 15 : isTablet ? 20 : 25 },
+          ]}
+        >
+          <View
+            style={[
+              styles.headerIconContainer,
+              {
+                width: isMobile ? 60 : isTablet ? 70 : 80,
+                height: isMobile ? 60 : isTablet ? 70 : 80,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="taxi"
+              size={iconSize.xlarge}
+              color="#FFFFFF"
+            />
           </View>
-          <Text style={styles.headerTitle}>Dispatcher Dashboard</Text>
-          <Text style={styles.headerSubtitle}>Real-time taxi management system</Text>
+          <Text
+            style={[
+              styles.headerTitle,
+              {
+                fontSize: fontSize['3xl'],
+                marginTop: isMobile ? 10 : 15,
+              },
+            ]}
+          >
+            Dispatcher Dashboard
+          </Text>
+          <Text
+            style={[
+              styles.headerSubtitle,
+              {
+                fontSize: fontSize.md,
+                marginTop: isMobile ? 4 : 6,
+              },
+            ]}
+          >
+            Real-time taxi management system
+          </Text>
         </View>
       </View>
 
-      <View style={styles.container}>
-        {/* Route Info Card */}
-        <View style={styles.routeCard}>
+      <View
+        style={[
+          styles.container,
+          {
+            width: containerWidth,
+            alignSelf: 'center',
+            paddingVertical: isMobile ? 15 : 20,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.routeCard,
+            {
+              marginBottom: isMobile ? 20 : 24,
+              padding: isMobile ? 20 : isTablet ? 24 : 28,
+            },
+          ]}
+        >
           <View style={styles.routeHeader}>
-            <Ionicons name="location-sharp" size={24} color="#4169E1" />
-            <Text style={styles.routeLabel}>Assigned Route</Text>
+            <Ionicons
+              name="location-sharp"
+              size={iconSize.medium}
+              color="#4169E1"
+            />
+            <Text
+              style={[
+                styles.routeLabel,
+                { fontSize: fontSize.md, marginLeft: isMobile ? 8 : 10 },
+              ]}
+            >
+              Assigned Route
+            </Text>
           </View>
-          <Text style={styles.routeValue}>{assignedRoute || "Loading..."}</Text>
+          <Text
+            style={[
+              styles.routeValue,
+              {
+                fontSize: fontSize['2xl'],
+                marginBottom: isMobile ? 15 : 20,
+              },
+            ]}
+          >
+            {assignedRoutes || 'Loading...'}
+          </Text>
           <View style={styles.routeStats}>
             <View style={styles.statItem}>
-              <Feather name="users" size={18} color="#64748B" />
-              <Text style={styles.statText}>Passengers</Text>
-              <Text style={styles.statNumber}>{currentpassengers || "0"}</Text>
+              <View style={styles.statIconContainer}>
+                <Feather name="users" size={iconSize.small} color="#FFFFFF" />
+              </View>
+              <Text
+                style={[
+                  styles.statLabel,
+                  { fontSize: fontSize.xs, marginTop: isMobile ? 4 : 6 },
+                ]}
+              >
+                Passengers
+              </Text>
+              <Text style={[styles.statNumber, { fontSize: fontSize['2xl'] }]}>
+                {currentPassengers || '0'}
+              </Text>
             </View>
             <View style={styles.statItem}>
-              <MaterialCommunityIcons name="taxi" size={18} color="#64748B" />
-              <Text style={styles.statText}>Taxis</Text>
-              <Text style={styles.statNumber}>{availabletaxis || "0"}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* PASSENGERS WAITING Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionIcon}>
-              <Feather name="users" size={24} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={styles.sectionTitle}>Passenger Management</Text>
-              <Text style={styles.sectionSubtitle}>Update waiting passenger count</Text>
-            </View>
-          </View>
-
-          <View style={styles.inputCard}>
-            <View style={styles.inputLabelContainer}>
-              <Feather name="user-plus" size={20} color="#4169E1" />
-              <Text style={styles.inputLabel}>Current Waiting Count</Text>
-            </View>
-            <TextInput
-              onChangeText={setWaitingCount}
-              value={WaitingCount}
-              placeholder="Enter number of passengers"
-              placeholderTextColor="#94A3B8"
-              style={styles.input}
-              keyboardType="numeric"
-              editable={!isUpdating}
-            />
-            
-            <Pressable
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.buttonPressed,
-                isUpdating && styles.buttonDisabled
-              ]}
-              onPress={handlePassengerSubmit}
-              disabled={isUpdating}
-            >
-              {isUpdating ? (
-                <>
-                  <Feather name="loader" size={20} color="#FFFFFF" style={styles.spinningIcon} />
-                  <Text style={styles.primaryButtonText}>Updating...</Text>
-                </>
-              ) : (
-                <>
-                  <Feather name="check-circle" size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>Update Passenger Count</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
-        {/* TAXI QUEUE Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: '#10B981' }]}>
-              <MaterialCommunityIcons name="car-multiple" size={24} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={styles.sectionTitle}>Taxi Queue Management</Text>
-              <Text style={styles.sectionSubtitle}>Manage taxi assignments and status</Text>
-            </View>
-          </View>
-
-          {/* Queue Stats */}
-          <View style={styles.queueStats}>
-            <View style={styles.queueStatCard}>
-              <Text style={styles.queueStatNumber}>{availabletaxis || "0"}</Text>
-              <Text style={styles.queueStatLabel}>Total Taxis</Text>
-            </View>
-            <View style={styles.queueStatCard}>
-              <Text style={styles.queueStatNumber}>
-                {queue.filter(t => !t.assigned).length}
-              </Text>
-              <Text style={styles.queueStatLabel}>Available</Text>
-            </View>
-          </View>
-
-          {/* Taxi List */}
-          <View style={styles.queueContainer}>
-            {queue.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Feather size={48} color="#CBD5E1" />
-                <Text style={styles.emptyTitle}>No Taxis in Queue</Text>
-                <Text style={styles.emptySubtitle}>Add taxis to start managing the queue</Text>
+              <View style={styles.statIconContainer}>
+                <MaterialCommunityIcons
+                  name="taxi"
+                  size={iconSize.small}
+                  color="#FFFFFF"
+                />
               </View>
-            ) : (
-              queue.map((t, idx) => (
-                <View key={idx} style={[
-                  styles.taxiCard,
-                  t.assigned && styles.taxiCardAssigned
-                ]}>
-                  <View style={styles.taxiInfo}>
-                    <View style={styles.taxiNumber}>
-                      <Text style={styles.taxiIndex}>{idx + 1}</Text>
-                    </View>
-                    <View style={styles.taxiDetails}>
-                      <Text style={styles.taxiPlate}>{t.PlateNo}</Text>
-                      <View style={styles.taxiStatus}>
-                        {t.assigned ? (
-                          <>
-                            <Feather name="check-circle" size={14} color="#10B981" />
-                            <Text style={styles.taxiStatusText}>Assigned to Trip</Text>
-                          </>
-                        ) : (
-                          <>
-                            <Feather name="clock" size={14} color="#F59E0B" />
-                            <Text style={styles.taxiStatusText}>Waiting for Assignment</Text>
-                          </>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                  
-                  {t.assigned ? (
-                    <View style={[styles.actionButton, styles.actionButtonDisabled]}>
-                      <Feather name="check" size={18} color="#FFFFFF" />
-                      <Text style={styles.actionButtonText}>Assigned to {t.to_route || "Unknown"}</Text>
-                    </View>
-                  ) : (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.actionButton,
-                        styles.actionButtonActive,
-                        pressed && styles.actionButtonPressed
+              <Text
+                style={[
+                  styles.statLabel,
+                  { fontSize: fontSize.xs, marginTop: isMobile ? 4 : 6 },
+                ]}
+              >
+                Available Taxis
+              </Text>
+              <Text style={[styles.statNumber, { fontSize: fontSize['2xl'] }]}>
+                {availabletaxis.count || '0'}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <MaterialCommunityIcons
+                  name="car-multiple"
+                  size={iconSize.small}
+                  color="#FFFFFF"
+                />
+              </View>
+              <Text
+                style={[
+                  styles.statLabel,
+                  { fontSize: fontSize.xs, marginTop: isMobile ? 4 : 6 },
+                ]}
+              >
+                In Queue
+              </Text>
+              <Text style={[styles.statNumber, { fontSize: fontSize['2xl'] }]}>
+                {taxiData?.length || '0'}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View
+          style={[
+            styles.mainGrid,
+            {
+              flexDirection: isTablet || isLargeScreen ? 'row' : 'column',
+              gap: isMobile ? 20 : 24,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.section,
+              {
+                flex: 1,
+                padding: isMobile ? 20 : isTablet ? 24 : 28,
+                minHeight: 350,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.sectionHeader,
+                { marginBottom: isMobile ? 20 : 24 },
+              ]}
+            >
+              <View
+                style={[
+                  styles.sectionIcon,
+                  {
+                    width: isMobile ? 45 : 50,
+                    height: isMobile ? 45 : 50,
+                    marginRight: isMobile ? 12 : 16,
+                  },
+                ]}
+              >
+                <Feather name="users" size={iconSize.medium} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={[styles.sectionTitle, { fontSize: fontSize.xl }]}>
+                  Passenger Management
+                </Text>
+                <Text
+                  style={[styles.sectionSubtitle, { fontSize: fontSize.xs }]}
+                >
+                  Update waiting passenger count
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.inputCard, { padding: isMobile ? 16 : 20 }]}>
+              <View style={styles.inputLabelContainer}>
+                <Feather
+                  name="user-plus"
+                  size={iconSize.medium}
+                  color="#4169E1"
+                />
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    {
+                      fontSize: fontSize.sm,
+                      marginLeft: isMobile ? 6 : 8,
+                    },
+                  ]}
+                >
+                  Current Waiting Count
+                </Text>
+              </View>
+              <TextInput
+                onChangeText={setWaitingCount}
+                value={WaitingCount}
+                placeholder="Enter number"
+                placeholderTextColor="#94A3B8"
+                style={[
+                  styles.input,
+                  {
+                    height: isMobile ? 50 : 56,
+                    fontSize: fontSize['2xl'],
+                    marginBottom: isMobile ? 16 : 20,
+                  },
+                ]}
+                keyboardType="numeric"
+                editable={!isUpdating}
+              />
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  { height: isMobile ? 48 : 52 },
+                  pressed && styles.buttonPressed,
+                  isUpdating && styles.buttonDisabled,
+                ]}
+                onPress={handlePassengerSubmit}
+                disabled={isUpdating}
+              >
+                {isUpdating ? (
+                  <>
+                    <Feather
+                      name="loader"
+                      size={iconSize.medium}
+                      color="#FFFFFF"
+                      style={styles.spinningIcon}
+                    />
+                    <Text
+                      style={[
+                        styles.primaryButtonText,
+                        { fontSize: fontSize.sm },
                       ]}
-                      onPress={() => removeTaxi(t.PlateNo)}
                     >
-                      <Feather name="check-circle" size={18} color="#FFFFFF" />
-                      <Text style={styles.actionButtonText}>Mark as On Trip</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))
-            )}
+                      Updating...
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Feather
+                      name="check-circle"
+                      size={iconSize.medium}
+                      color="#FFFFFF"
+                    />
+                    <Text
+                      style={[
+                        styles.primaryButtonText,
+                        { fontSize: fontSize.sm, paddingLeft: 4 },
+                      ]}
+                    >
+                      Update Passenger Count
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.primaryButton,
-                styles.buttonWithIcon,
-                pressed && styles.buttonPressed
+          <View
+            style={[
+              styles.section,
+              {
+                flex: 1,
+                padding: isMobile ? 20 : isTablet ? 24 : 28,
+                minHeight: 350,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.sectionHeader,
+                { marginBottom: isMobile ? 20 : 24 },
               ]}
-              onPress={() => setShowModal(true)}
             >
-              <Feather name="plus-circle" size={22} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>Register New Taxi</Text>
-            </Pressable>
+              <View
+                style={[
+                  styles.sectionIcon,
+                  {
+                    backgroundColor: '#10B981',
+                    width: isMobile ? 45 : 50,
+                    height: isMobile ? 45 : 50,
+                    marginRight: isMobile ? 12 : 16,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="car-multiple"
+                  size={iconSize.medium}
+                  color="#FFFFFF"
+                />
+              </View>
+              <View>
+                <Text style={[styles.sectionTitle, { fontSize: fontSize.xl }]}>
+                  Taxi Queue
+                </Text>
+                <Text
+                  style={[styles.sectionSubtitle, { fontSize: fontSize.xs }]}
+                >
+                  Manage taxi assignments and status
+                </Text>
+              </View>
+            </View>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                styles.buttonWithIcon,
-                pressed && styles.buttonPressed
+            <View style={[styles.queueContainer, { flex: 1 }]}>
+              {taxiData?.length === 0 ? (
+                <View
+                  style={[
+                    styles.emptyState,
+                    { paddingVertical: isMobile ? 30 : 40 },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="car-cog"
+                    size={iconSize.xlarge}
+                    color="#CBD5E1"
+                  />
+                  <Text
+                    style={[
+                      styles.emptyTitle,
+                      {
+                        fontSize: fontSize.lg,
+                        marginTop: isMobile ? 12 : 16,
+                      },
+                    ]}
+                  >
+                    No Taxis in Queue
+                  </Text>
+                  <Text
+                    style={[
+                      styles.emptySubtitle,
+                      {
+                        fontSize: fontSize.xs,
+                        marginTop: isMobile ? 4 : 8,
+                      },
+                    ]}
+                  >
+                    Add taxis to start managing the queue
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  style={styles.queueScroll}
+                  showsVerticalScrollIndicator={isLargeScreen}
+                >
+                  {taxiData?.map((t, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.taxiCard,
+                        t.assigned && styles.taxiCardAssigned,
+                        {
+                          padding: isMobile ? 14 : 16,
+                          marginBottom: isMobile ? 10 : 12,
+                        },
+                      ]}
+                    >
+                      <View style={styles.taxiInfo}>
+                        <View
+                          style={[
+                            styles.taxiNumber,
+                            {
+                              width: isMobile ? 32 : 36,
+                              height: isMobile ? 32 : 36,
+                              marginRight: isMobile ? 10 : 12,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.taxiIndex,
+                              { fontSize: fontSize.sm },
+                            ]}
+                          >
+                            {idx + 1}
+                          </Text>
+                        </View>
+                        <View style={styles.taxiDetails}>
+                          <View style={styles.taxiPlateRow}>
+                            <MaterialCommunityIcons
+                              name="car"
+                              size={iconSize.small}
+                              color="#64748B"
+                            />
+                            <Text
+                              style={[
+                                styles.taxiPlate,
+                                { fontSize: fontSize.md, marginLeft: 6 },
+                              ]}
+                            >
+                              {t.PlateNo}
+                            </Text>
+                          </View>
+                          <View style={styles.taxiStatus}>
+                            {t.assigned ? (
+                              <>
+                                <Feather
+                                  name="check-circle"
+                                  size={iconSize.small}
+                                  color="#10B981"
+                                />
+                                <Text
+                                  style={[
+                                    styles.taxiStatusText,
+                                    { fontSize: fontSize.xs, marginLeft: 4 },
+                                  ]}
+                                >
+                                  Assigned to {t.to_route || 'Trip'}
+                                </Text>
+                              </>
+                            ) : (
+                              <>
+                                <Feather
+                                  name="clock"
+                                  size={iconSize.small}
+                                  color="#F59E0B"
+                                />
+                                <Text
+                                  style={[
+                                    styles.taxiStatusText,
+                                    { fontSize: fontSize.xs, marginLeft: 4 },
+                                  ]}
+                                >
+                                  Waiting for Assignment
+                                </Text>
+                              </>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+
+                      {t.assigned ? (
+                        <View
+                          style={[
+                            styles.actionButton,
+                            styles.actionButtonDisabled,
+                            {
+                              paddingVertical: isMobile ? 8 : 10,
+                              paddingHorizontal: isMobile ? 12 : 16,
+                            },
+                          ]}
+                        >
+                          <Feather
+                            name="check"
+                            size={iconSize.small}
+                            color="#FFFFFF"
+                          />
+                          {!isMobile && (
+                            <Text
+                              style={[
+                                styles.actionButtonText,
+                                { fontSize: fontSize.xs, marginLeft: 4 },
+                              ]}
+                            >
+                              Assigned
+                            </Text>
+                          )}
+                        </View>
+                      ) : (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.actionButton,
+                            styles.actionButtonActive,
+                            {
+                              paddingVertical: isMobile ? 8 : 10,
+                              paddingHorizontal: isMobile ? 12 : 16,
+                            },
+                            pressed && styles.actionButtonPressed,
+                          ]}
+                          onPress={() => removeTaxi(t.PlateNo)}
+                        >
+                          <Feather
+                            name="check-circle"
+                            size={iconSize.small}
+                            color="#FFFFFF"
+                          />
+                          {!isMobile && (
+                            <Text
+                              style={[
+                                styles.actionButtonText,
+                                { fontSize: fontSize.xs, marginLeft: 4 },
+                              ]}
+                            >
+                              Mark as On Trip
+                            </Text>
+                          )}
+                        </Pressable>
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+
+            <View
+              style={[
+                styles.actionButtons,
+                { gap: isMobile ? 10 : 12, marginTop: 20 },
               ]}
-              onPress={() => router.push("/(tabs)/availableTaxi")}
             >
-              <Feather name="list" size={22} color="#FFFFFF" />
-              <Text style={styles.secondaryButtonText}>View All Taxis</Text>
-            </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  styles.buttonWithIcon,
+                  { height: isMobile ? 48 : 52, flex: 1 },
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => setShowModal(true)}
+              >
+                <Feather
+                  name="plus-circle"
+                  size={iconSize.medium}
+                  color="#FFFFFF"
+                />
+                <Text
+                  style={[styles.primaryButtonText, { fontSize: fontSize.sm }]}
+                >
+                  Register New Taxi
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  styles.buttonWithIcon,
+                  { height: isMobile ? 48 : 52, flex: 1 },
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => router.push('/(tabs)/availableTaxi')}
+              >
+                <Feather name="list" size={iconSize.medium} color="#FFFFFF" />
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    { fontSize: fontSize.sm },
+                  ]}
+                >
+                  View All Taxis
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
 
@@ -501,17 +781,45 @@ useFocusEffect(
           <TaxiRegistration
             visible={showModal}
             onClose={() => setShowModal(false)}
-            onTaxiCreated={() => fetchQueue()}
           />
         )}
 
         {/* Footer Info */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            <Feather name="refresh-cw" size={14} color="#94A3B8" />
-            <Text> Auto-refreshing every 5 seconds</Text>
-          </Text>
-          <Text style={styles.footerVersion}>Dispatcher v2.4</Text>
+        <View
+          style={[
+            styles.footer,
+            {
+              paddingTop: isMobile ? 15 : 20,
+              marginTop: isMobile ? 15 : 20,
+            },
+          ]}
+        >
+          <View style={styles.footerInfo}>
+            <Feather name="refresh-cw" size={iconSize.small} color="#94A3B8" />
+            <Text
+              style={[
+                styles.footerText,
+                { fontSize: fontSize.xs, marginLeft: 6 },
+              ]}
+            >
+              Auto-refreshing every 5 seconds
+            </Text>
+          </View>
+          <View style={styles.footerInfo}>
+            <MaterialCommunityIcons
+              name="taxi"
+              size={iconSize.small}
+              color="#94A3B8"
+            />
+            <Text
+              style={[
+                styles.footerVersion,
+                { fontSize: fontSize.xs, marginLeft: 6 },
+              ]}
+            >
+              Taxi Dispatcher v1.0
+            </Text>
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -520,13 +828,15 @@ useFocusEffect(
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: '#F8FAFC',
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   headerContainer: {
     backgroundColor: '#4169E1',
     width: '100%',
-    paddingVertical: isWeb ? 40 : 30,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     shadowColor: '#4169E1',
@@ -540,10 +850,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
-    paddingHorizontal: 20,
-    marginBottom: 20,
   },
   headerLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerRightSection: {
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -552,21 +864,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
   },
   profileName: {
     color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '500',
+  },
+  notificationButton: {
+    position: 'relative',
+    // backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 10,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#FF4757',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
   },
@@ -577,11 +911,8 @@ const styles = StyleSheet.create({
   },
   headerContent: {
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
   headerIconContainer: {
-    width: isWeb ? 80 : 70,
-    height: isWeb ? 80 : 70,
     borderRadius: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
@@ -591,33 +922,27 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   headerTitle: {
-    fontSize: isWeb ? 32 : 26,
     fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 8,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: isWeb ? 16 : 14,
     color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
     fontWeight: '500',
   },
   container: {
     flex: 1,
-    alignItems: "center",
-    paddingVertical: isWeb ? 30 : 20,
-    paddingHorizontal: isWeb ? 20 : 15,
+  },
+  mainGrid: {
+    width: '100%',
   },
   routeCard: {
-    width: "100%",
-    maxWidth: 600,
-    backgroundColor: "#FFFFFF",
+    width: '100%',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: isWeb ? 30 : 24,
-    marginBottom: 24,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -631,16 +956,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   routeLabel: {
-    fontSize: isWeb ? 18 : 16,
     fontWeight: '600',
-    color: "#334155",
-    marginLeft: 10,
+    color: '#334155',
   },
   routeValue: {
-    fontSize: isWeb ? 28 : 24,
     fontWeight: '700',
-    color: "#4169E1",
-    marginBottom: 20,
+    color: '#4169E1',
     textAlign: 'center',
   },
   routeStats: {
@@ -652,27 +973,30 @@ const styles = StyleSheet.create({
   },
   statItem: {
     alignItems: 'center',
+    flex: 1,
   },
-  statText: {
-    fontSize: isWeb ? 14 : 12,
-    color: "#64748B",
-    marginTop: 6,
+  statIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4169E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statLabel: {
+    color: '#64748B',
     fontWeight: '500',
   },
   statNumber: {
-    fontSize: isWeb ? 24 : 20,
     fontWeight: '700',
-    color: "#1E293B",
+    color: '#1E293B',
     marginTop: 4,
   },
   section: {
-    width: "100%",
-    maxWidth: 600,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: isWeb ? 30 : 24,
-    marginBottom: 24,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -683,31 +1007,24 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
   },
   sectionIcon: {
-    width: 50,
-    height: 50,
     borderRadius: 12,
     backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
   sectionTitle: {
-    fontSize: isWeb ? 22 : 20,
     fontWeight: '700',
-    color: "#1E293B",
+    color: '#1E293B',
   },
   sectionSubtitle: {
-    fontSize: isWeb ? 14 : 12,
-    color: "#64748B",
+    color: '#64748B',
     marginTop: 4,
   },
   inputCard: {
     backgroundColor: '#F8FAFF',
     borderRadius: 16,
-    padding: 20,
     borderWidth: 1,
     borderColor: '#E0EAFF',
   },
@@ -717,28 +1034,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inputLabel: {
-    fontSize: isWeb ? 16 : 14,
     fontWeight: '600',
-    color: "#334155",
-    marginLeft: 8,
+    color: '#334155',
   },
   input: {
-    width: "100%",
-    height: isWeb ? 60 : 56,
-    fontSize: isWeb ? 32 : 28,
-    backgroundColor: "white",
+    width: '100%',
+    backgroundColor: 'white',
     borderRadius: 12,
     paddingHorizontal: 20,
-    color: "#1E293B",
+    color: '#1E293B',
     borderWidth: 2,
-    borderColor: "#E2E8F0",
-    marginBottom: 20,
+    borderColor: '#E2E8F0',
     textAlign: 'center',
     fontWeight: '600',
   },
   primaryButton: {
-    backgroundColor: "#4169E1",
-    height: isWeb ? 56 : 52,
+    backgroundColor: '#4169E1',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -750,8 +1061,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   secondaryButton: {
-    backgroundColor: "#003B73",
-    height: isWeb ? 56 : 52,
+    backgroundColor: '#003B73',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -763,7 +1073,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   buttonWithIcon: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     gap: 10,
   },
   buttonPressed: {
@@ -771,63 +1081,33 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   buttonDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: '#94A3B8',
   },
   spinningIcon: {
-    // animationframe: {
-    //   '0%': { transform: [{ rotate: '0deg' }] },
-    //   '100%': { transform: [{ rotate: '360deg' }] },
-    // },
     animationDuration: '1s',
     animationIterationCount: 'infinite',
   },
   primaryButtonText: {
-    color: "white",
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "600",
+    color: 'white',
+    fontWeight: '600',
   },
   secondaryButtonText: {
-    color: "white",
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "600",
-  },
-  queueStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  queueStatCard: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginHorizontal: 6,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  queueStatNumber: {
-    fontSize: isWeb ? 28 : 24,
-    fontWeight: '700',
-    color: "#4169E1",
-  },
-  queueStatLabel: {
-    fontSize: isWeb ? 13 : 12,
-    color: "#64748B",
-    marginTop: 4,
-    fontWeight: '500',
+    color: 'white',
+    fontWeight: '600',
   },
   queueContainer: {
-    marginBottom: 24,
+    flex: 1,
+    minHeight: 200,
+  },
+  queueScroll: {
+    flex: 1,
   },
   taxiCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: "white",
-    padding: 16,
+    backgroundColor: 'white',
     borderRadius: 14,
-    marginBottom: 12,
     borderWidth: 1.5,
     borderColor: '#F1F5F9',
     shadowColor: '#000',
@@ -846,102 +1126,87 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taxiNumber: {
-    width: 36,
-    height: 36,
     borderRadius: 10,
     backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   taxiIndex: {
     color: '#FFFFFF',
-    fontSize: 16,
     fontWeight: '700',
   },
   taxiDetails: {
     flex: 1,
   },
-  taxiPlate: {
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: '700',
-    color: "#1E293B",
+  taxiPlateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
+  },
+  taxiPlate: {
+    fontWeight: '700',
+    color: '#1E293B',
   },
   taxiStatus: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   taxiStatusText: {
-    fontSize: isWeb ? 13 : 12,
-    color: "#64748B",
-    marginLeft: 6,
+    color: '#64748B',
     fontWeight: '500',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
     borderRadius: 10,
-    gap: 6,
   },
   actionButtonActive: {
-    backgroundColor: "#10B981",
+    backgroundColor: '#10B981',
   },
   actionButtonDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: '#94A3B8',
   },
   actionButtonPressed: {
     opacity: 0.8,
   },
   actionButtonText: {
-    color: "white",
-    fontSize: isWeb ? 14 : 12,
-    fontWeight: "600",
+    color: 'white',
+    fontWeight: '600',
   },
   emptyState: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: 40,
+    justifyContent: 'center',
   },
   emptyTitle: {
-    fontSize: isWeb ? 20 : 18,
     fontWeight: '600',
-    color: "#64748B",
-    marginTop: 16,
+    color: '#64748B',
     marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: isWeb ? 14 : 12,
-    color: "#94A3B8",
+    color: '#94A3B8',
     textAlign: 'center',
   },
   actionButtons: {
-    gap: 12,
+    flexDirection: 'row',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
-    maxWidth: 600,
-    marginTop: 20,
-    paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },
-  footerText: {
-    fontSize: isWeb ? 13 : 11,
-    color: "#94A3B8",
+  footerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+  },
+  footerText: {
+    color: '#94A3B8',
   },
   footerVersion: {
-    fontSize: isWeb ? 13 : 11,
-    color: "#CBD5E1",
+    color: '#CBD5E1',
     fontWeight: '600',
   },
 });
-
-

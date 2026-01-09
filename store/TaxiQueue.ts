@@ -1,4 +1,3 @@
-// TaxiQueue.ts
 type Taxi = { PlateNo: string };
 
 let queue: Taxi[] = [];
