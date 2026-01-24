@@ -38,14 +38,35 @@ const fetchTaxiQueue = async (token: string, route: string) => {
   });
 };
 
+// export const useTaxiQueue = (route?: string) => {
+//   const { token } = useAuth();
+
+//   return useQuery({
+//     queryKey: ['taxiQueue', token, route],
+//     queryFn: () => fetchTaxiQueue(token!, route!),
+//     enabled: !!token && !!route,
+//     staleTime: 5_000,
+//     retry: 1,
+//   });
+// };
+
 export const useTaxiQueue = (route?: string) => {
   const { token } = useAuth();
 
-  return useQuery({
-    queryKey: ['taxiQueue', token, route],
+  return useQuery<Taxi[]>({
+    queryKey: ['taxiQueue', route],
     queryFn: () => fetchTaxiQueue(token!, route!),
     enabled: !!token && !!route,
-    staleTime: 5_000,
+
+    // 🔥 REFRESH AUTOMATICALLY
+    refetchInterval: 3000,
+
+    // 🔥 PREVENT UI BLINK
+    placeholderData: (previousData) => previousData,
+
+    // 🔥 DO NOT SHOW LOADING ON REFRESH
+    refetchOnWindowFocus: false,
+
     retry: 1,
   });
 };
