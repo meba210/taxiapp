@@ -8,8 +8,9 @@ import { useRemoveTaxi } from '@/hooks/use-remove-taxi';
 import { useTaxiQueue } from '@/hooks/use-taxi-queue';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,10 +33,10 @@ export default function TaxiDispatcher() {
   const containerWidth = isExtraLargeScreen
     ? '80%'
     : isLargeScreen
-    ? '85%'
-    : isTablet
-    ? '90%'
-    : '95%';
+      ? '85%'
+      : isTablet
+        ? '90%'
+        : '95%';
   const iconSize = {
     small: isMobile ? 16 : isTablet ? 18 : 20,
     medium: isMobile ? 20 : isTablet ? 22 : 24,
@@ -79,6 +80,17 @@ export default function TaxiDispatcher() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const stationId = 78;
+
+  const queryClient = useQueryClient();
+
+  const routeRef = useRef<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (assignedRoutes) {
+      routeRef.current = assignedRoutes;
+    }
+  }, [assignedRoutes]);
 
   const handleLogout = async () => {
     try {
@@ -132,26 +144,148 @@ export default function TaxiDispatcher() {
     }
   };
 
-  const [token, setToken] = useState<string | null>(null);
-
   useEffect(() => {
     const loadToken = async () => {
-      const savedToken = await AsyncStorage.getItem('token');
-      if (!savedToken) {
-        Alert.alert('Error', 'No token found 33333333');
-        return;
-      }
-      setToken(savedToken);
+      const token = await AsyncStorage.getItem('token');
+      setToken(token);
+      console.log('Token from AsyncStorage:', token);
     };
 
     loadToken();
   }, []);
 
+  // useEffect(() => {
+  //   console.log('At least I am here .................');
+
+  //   const handleConnect = () => console.log('🟢 Socket connected', socket.id);
+  //   const handleDisconnect = (reason: string) =>
+  //     console.log('🔴 Socket disconnected', reason);
+
+  //   socket.on('connect', handleConnect);
+  //   socket.on('disconnect', handleDisconnect);
+
+  //   const initSocket = async () => {
+  //     const token = await AsyncStorage.getItem('token');
+
+  //     if (!token) return;
+
+  //     socket.auth = { token }; // must be before connect
+  //     if (!socket.connected) socket.connect();
+  //   };
+
+  //   initSocket();
+
+  //   return () => {
+  //     socket.off('connect', handleConnect);
+  //     socket.off('disconnect', handleDisconnect);
+  //   };
+  // }, []);
+
+  // useEffect(() => {
+  //   if (!assignedRoutes) return;
+
+  //   console.log('🧪 Setting up socket for route:', assignedRoutes);
+
+  //   // Connect if not already connected
+  //   if (!socket.connected) socket.connect();
+
+  //   // Join route room on connect
+  //   const handleConnect = () => {
+  //     console.log('🟢 Socket connected:', socket.id);
+  //     socket.emit('joinRoute', assignedRoutes);
+  //   };
+  //   socket.on('connect', handleConnect);
+
+  //   // Listen for taxi assigned events
+  //   const handleTaxiAssigned = (data: any) => {
+  //     console.log('🔥 Taxi assigned event received:', data);
+
+  //     // Only invalidate if the update is for this route
+  //     if (data.from_route === assignedRoutes) {
+  //       queryClient.invalidateQueries({
+  //         queryKey: ['taxiQueue'],
+  //         exact: false,
+  //       });
+  //       queryClient.invalidateQueries({
+  //         queryKey: ['availableTaxis'],
+  //         exact: false,
+  //       });
+  //       queryClient.invalidateQueries({
+  //         queryKey: ['assignedRoute'],
+  //         exact: false,
+  //       });
+  //     }
+  //   };
+  //   socket.on('taxi:assigned', handleTaxiAssigned);
+
+  //   return () => {
+  //     socket.off('connect', handleConnect);
+  //     socket.off('taxi:assigned', handleTaxiAssigned);
+  //     // Keep socket alive globally
+  //   };
+  // }, [assignedRoutes]);
+
+  // useEffect(() => {
+  //   const initSocket = async () => {
+  //     // const token = await AsyncStorage.getItem('token');
+  //     if (!token || !assignedRoutes) return;
+
+  //     // Set auth before connecting
+  //     socket.auth = { token };
+
+  //     if (!socket.connected) {
+  //       socket.connect();
+  //     }
+
+  //     // Connect callback
+  //     const handleConnect = () => {
+  //       console.log('🟢 Socket connected', socket.id);
+  //       socket.emit('joinRoute', assignedRoutes);
+  //     };
+
+  //     // Event listeners
+  //     const handleDisconnect = (reason: string) =>
+  //       console.log('🔴 Socket disconnected', reason);
+
+  //     const handleTaxiAssigned = (data: any) => {
+  //       console.log('🔥 Taxi assigned event received:', data);
+
+  //       if (data.from_route === assignedRoutes) {
+  //         queryClient.invalidateQueries({
+  //           queryKey: ['taxiQueue'],
+  //           exact: false,
+  //         });
+  //         queryClient.invalidateQueries({
+  //           queryKey: ['availableTaxis'],
+  //           exact: false,
+  //         });
+  //         queryClient.invalidateQueries({
+  //           queryKey: ['assignedRoute'],
+  //           exact: false,
+  //         });
+  //       }
+  //     };
+
+  //     socket.on('connect', handleConnect);
+  //     socket.on('disconnect', handleDisconnect);
+  //     socket.on('taxi:assigned', handleTaxiAssigned);
+
+  //     // Cleanup
+  //     return () => {
+  //       socket.off('connect', handleConnect);
+  //       socket.off('disconnect', handleDisconnect);
+  //       socket.off('taxi:assigned', handleTaxiAssigned);
+  //     };
+  //   };
+
+  //   initSocket();
+  // }, [assignedRoutes, queryClient]);
+
   if (
-    isLoading ||
-    isCurrentPassengerLoading ||
-    isAvailableTaxLoading ||
-    isTaxiDataLoading
+    (isLoading && !assignedRoutes) ||
+    (isCurrentPassengerLoading && !currentPassengers) ||
+    (isAvailableTaxLoading && !availabletaxis) ||
+    (isTaxiDataLoading && !taxiData)
   )
     return <ActivityIndicator />;
 
@@ -577,6 +711,10 @@ export default function TaxiDispatcher() {
                   style={styles.queueScroll}
                   showsVerticalScrollIndicator={isLargeScreen}
                 >
+                  {isTaxiDataLoading && (taxiData ?? []).length > 0 && (
+                    <Text>Updating...</Text>
+                  )}
+
                   {taxiData?.map((t, idx) => (
                     <View
                       key={idx}
