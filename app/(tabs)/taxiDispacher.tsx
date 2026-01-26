@@ -157,9 +157,9 @@ export default function TaxiDispatcher() {
   // useEffect(() => {
   //   console.log('At least I am here .................');
 
-  //   const handleConnect = () => console.log('🟢 Socket connected', socket.id);
+  //   const handleConnect = () => console.log(' Socket connected', socket.id);
   //   const handleDisconnect = (reason: string) =>
-  //     console.log('🔴 Socket disconnected', reason);
+  //     console.log(' Socket disconnected', reason);
 
   //   socket.on('connect', handleConnect);
   //   socket.on('disconnect', handleDisconnect);
@@ -184,21 +184,21 @@ export default function TaxiDispatcher() {
   // useEffect(() => {
   //   if (!assignedRoutes) return;
 
-  //   console.log('🧪 Setting up socket for route:', assignedRoutes);
+  //   console.log('Setting up socket for route:', assignedRoutes);
 
   //   // Connect if not already connected
   //   if (!socket.connected) socket.connect();
 
   //   // Join route room on connect
   //   const handleConnect = () => {
-  //     console.log('🟢 Socket connected:', socket.id);
+  //     console.log(' Socket connected:', socket.id);
   //     socket.emit('joinRoute', assignedRoutes);
   //   };
   //   socket.on('connect', handleConnect);
 
   //   // Listen for taxi assigned events
   //   const handleTaxiAssigned = (data: any) => {
-  //     console.log('🔥 Taxi assigned event received:', data);
+  //     console.log(' Taxi assigned event received:', data);
 
   //     // Only invalidate if the update is for this route
   //     if (data.from_route === assignedRoutes) {
@@ -239,16 +239,16 @@ export default function TaxiDispatcher() {
 
   //     // Connect callback
   //     const handleConnect = () => {
-  //       console.log('🟢 Socket connected', socket.id);
+  //       console.log(' Socket connected', socket.id);
   //       socket.emit('joinRoute', assignedRoutes);
   //     };
 
   //     // Event listeners
   //     const handleDisconnect = (reason: string) =>
-  //       console.log('🔴 Socket disconnected', reason);
+  //       console.log(' Socket disconnected', reason);
 
   //     const handleTaxiAssigned = (data: any) => {
-  //       console.log('🔥 Taxi assigned event received:', data);
+  //       console.log(' Taxi assigned event received:', data);
 
   //       if (data.from_route === assignedRoutes) {
   //         queryClient.invalidateQueries({
@@ -922,7 +922,7 @@ export default function TaxiDispatcher() {
           />
         )}
 
-        {/* Footer Info */}
+       
         <View
           style={[
             styles.footer,
@@ -1012,7 +1012,7 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     position: 'relative',
-    // backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    
     padding: 10,
     borderRadius: 20,
     justifyContent: 'center',
